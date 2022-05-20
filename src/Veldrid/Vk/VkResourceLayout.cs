@@ -34,10 +34,6 @@ namespace Veldrid.Vulkan
             uint storageBufferCount = 0;
             uint storageImageCount = 0;
             //Only the last element may have variable length
-            if (description.LastElementParams && elements.Length != 1)
-            {
-                throw new System.ArgumentException("Bindless Layouts must only consist of one member");
-            }
             for (uint i = 0; i < elements.Length; i++)
             {
                 bindings[i].binding = i;
@@ -52,7 +48,7 @@ namespace Veldrid.Vulkan
                 _descriptorTypes[i] = descriptorType;
                 if (description.LastElementParams && i == elements.Length - 1)
                 {
-                    bindings[i].descriptorCount = 1024 - i;
+                    bindings[i].descriptorCount = 1024;
                     bindless_flags[i] = VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
                 }
                 switch (descriptorType)
