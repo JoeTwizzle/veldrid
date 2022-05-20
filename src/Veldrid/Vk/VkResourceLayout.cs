@@ -79,13 +79,6 @@ namespace Veldrid.Vulkan
                 storageImageCount);
 
 
-            VkDescriptorSetLayoutBindingFlagsCreateInfo extendedInfo = new()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-                bindingCount = (uint)elements.Length,
-                pBindingFlags = bindless_flags,
-            };
-
             VkDescriptorSetLayoutCreateInfo dslCI = new()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -96,6 +89,12 @@ namespace Veldrid.Vulkan
 
             if (description.LastElementParams)
             {
+                VkDescriptorSetLayoutBindingFlagsCreateInfo extendedInfo = new()
+                {
+                    sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                    bindingCount = (uint)elements.Length,
+                    pBindingFlags = bindless_flags,
+                };
                 dslCI.pNext = &extendedInfo;
             }
 

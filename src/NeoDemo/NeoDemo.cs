@@ -39,6 +39,7 @@ namespace Veldrid.NeoDemo
         private FullScreenQuad _fsq;
         private static RenderDoc _renderDoc;
         private bool _controllerDebugMenu;
+        private Skybox _skybox;
 
         public NeoDemo()
         {
@@ -80,8 +81,8 @@ namespace Veldrid.NeoDemo
             _scene.AddRenderable(_igRenderable);
             _scene.AddUpdateable(_igRenderable);
 
-            Skybox skybox = Skybox.LoadDefaultSkybox();
-            _scene.AddRenderable(skybox);
+            _skybox = Skybox.LoadDefaultSkybox();
+            _scene.AddRenderable(_skybox);
 
             AddSponzaAtriumObjects();
             _sc.Camera.Position = new Vector3(-80, 25, -4.3f);
@@ -334,6 +335,15 @@ namespace Veldrid.NeoDemo
                 }
                 if (ImGui.BeginMenu("Materials"))
                 {
+                    if (ImGui.BeginMenu("Skybox"))
+                    {
+                        int idx = _skybox.TexIndex;
+                        if (ImGui.SliderInt("TextureIndex", ref idx, 0, 1))
+                        {
+                            _skybox.TexIndex = idx;
+                        }
+                        ImGui.EndMenu();
+                    }
                     if (ImGui.BeginMenu("Brick"))
                     {
                         DrawIndexedMaterialMenu(CommonMaterials.Brick);

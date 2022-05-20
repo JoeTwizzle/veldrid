@@ -15,6 +15,13 @@ namespace Veldrid.NeoDemo.Objects
         private readonly Image<Rgba32> _top;
         private readonly Image<Rgba32> _bottom;
 
+        private readonly Image<Rgba32> _front2;
+        private readonly Image<Rgba32> _back2;
+        private readonly Image<Rgba32> _left2;
+        private readonly Image<Rgba32> _right2;
+        private readonly Image<Rgba32> _top2;
+        private readonly Image<Rgba32> _bottom2;
+
         // Context objects
         private DeviceBuffer _vb;
         private DeviceBuffer _ib;
@@ -23,10 +30,15 @@ namespace Veldrid.NeoDemo.Objects
         private Pipeline _reflectionPipeline;
         private ResourceSet _resourceSet;
         private readonly DisposeCollector _disposeCollector = new();
+        private bool _texIndexChanged = false;
+        private int _texIndex = 0;
+        public int TexIndex { get => _texIndex; set => SetTexIndex(value); }
 
         public Skybox(
             Image<Rgba32> front, Image<Rgba32> back, Image<Rgba32> left,
-            Image<Rgba32> right, Image<Rgba32> top, Image<Rgba32> bottom)
+            Image<Rgba32> right, Image<Rgba32> top, Image<Rgba32> bottom,
+            Image<Rgba32> front2, Image<Rgba32> back2, Image<Rgba32> left2,
+            Image<Rgba32> right2, Image<Rgba32> top2, Image<Rgba32> bottom2)
         {
             _front = front;
             _back = back;
@@ -34,6 +46,18 @@ namespace Veldrid.NeoDemo.Objects
             _right = right;
             _top = top;
             _bottom = bottom;
+            _front2 = front2;
+            _back2 = back2;
+            _left2 = left2;
+            _right2 = right2;
+            _top2 = top2;
+            _bottom2 = bottom2;
+        }
+
+        public void SetTexIndex(int texIndex)
+        {
+            _texIndex = texIndex;
+            _texIndexChanged = true;
         }
 
         public override void CreateDeviceObjects(GraphicsDevice gd, CommandList cl, SceneContext sc)
@@ -47,13 +71,14 @@ namespace Veldrid.NeoDemo.Objects
             cl.UpdateBuffer(_ib, 0, s_indices);
 
             _ab = factory.CreateBuffer(new BufferDescription(gd.UniformBufferMinOffsetAlignment, BufferUsage.UniformBuffer));
-            cl.UpdateBuffer(_ab, 0, 1);
+            cl.UpdateBuffer(_ab, 0, _texIndex);
 
             ImageSharpCubemapTexture imageSharpCubemapTexture = new(_right, _left, _top, _bottom, _back, _front, false);
-
+            ImageSharpCubemapTexture imageSharpCubemapTexture2 = new(_right2, _left2, _top2, _bottom2, _back2, _front2, false);
             Texture textureCube = imageSharpCubemapTexture.CreateDeviceTexture(gd, factory);
+            Texture textureCube2 = imageSharpCubemapTexture2.CreateDeviceTexture(gd, factory);
             TextureView textureView = factory.CreateTextureView(new TextureViewDescription(textureCube));
-
+            TextureView textureView2 = factory.CreateTextureView(new TextureViewDescription(textureCube2));
             VertexLayoutDescription[] vertexLayouts = new VertexLayoutDescription[]
             {
                 new VertexLayoutDescription(
@@ -89,7 +114,7 @@ namespace Veldrid.NeoDemo.Objects
                 gd.PointSampler,
                 _ab,
                 textureView,
-                textureView
+                textureView2
                 ));
 
             _disposeCollector.Add(_vb, _ib, textureCube, textureView, _layout, _pipeline, _reflectionPipeline, _resourceSet, vs, fs);
@@ -97,6 +122,11 @@ namespace Veldrid.NeoDemo.Objects
 
         public override void UpdatePerFrameResources(GraphicsDevice gd, CommandList cl, SceneContext sc)
         {
+            if (_texIndexChanged)
+            {
+                cl.UpdateBuffer(_ab, 0, _texIndex);
+                _texIndexChanged = false;
+            }
         }
 
         public static Skybox LoadDefaultSkybox()
@@ -107,7 +137,13 @@ namespace Veldrid.NeoDemo.Objects
                 Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop/cloudtop_lf.png")),
                 Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop/cloudtop_rt.png")),
                 Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop/cloudtop_up.png")),
-                Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop/cloudtop_dn.png")));
+                Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop/cloudtop_dn.png")),
+                Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop2/clouds1_south.bmp")),
+                Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop2/clouds1_north.bmp")),
+                Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop2/clouds1_west.bmp")),
+                Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop2/clouds1_east.bmp")),
+                Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop2/clouds1_up.bmp")),
+                Image.Load<Rgba32>(AssetHelper.GetPath("Textures/cloudtop2/clouds1_down.bmp")));
         }
 
         public override void DestroyDeviceObjects()
@@ -129,6 +165,7 @@ namespace Veldrid.NeoDemo.Objects
         }
 
         public override RenderPasses RenderPasses => RenderPasses.Standard | RenderPasses.ReflectionMap;
+
 
         public override RenderOrderKey GetRenderOrderKey(Vector3 cameraPosition)
         {
