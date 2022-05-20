@@ -37,6 +37,10 @@ namespace Veldrid
         /// of each resource element in the <see cref="ResourceLayout"/>.</param>
         public ResourceLayoutDescription(bool lastElementParams, params ResourceLayoutElementDescription[] elements)
         {
+            if (!lastElementParams)
+            {
+                throw new ArgumentException($"{nameof(lastElementParams)} must be true. What are you even trying to do?");
+            }
             LastElementParams = lastElementParams;
             Elements = elements;
         }
@@ -48,7 +52,7 @@ namespace Veldrid
         /// <returns>True if all array elements are equal; false otherswise.</returns>
         public bool Equals(ResourceLayoutDescription other)
         {
-            return Util.ArrayEqualsEquatable(Elements, other.Elements);
+            return LastElementParams == other.LastElementParams && Util.ArrayEqualsEquatable(Elements, other.Elements);
         }
 
         /// <summary>
@@ -57,7 +61,7 @@ namespace Veldrid
         /// <returns>A 32-bit signed integer that is the hash code for this instance.</returns>
         public override int GetHashCode()
         {
-            return HashHelper.Array(Elements);
+            return HashCode.Combine(LastElementParams, HashHelper.Array(Elements));
         }
     }
 }

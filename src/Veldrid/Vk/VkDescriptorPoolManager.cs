@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
+using System.Numerics;
 using TerraFX.Interop.Vulkan;
 using static TerraFX.Interop.Vulkan.Vulkan;
 
@@ -14,20 +15,20 @@ namespace Veldrid.Vulkan
         public VkDescriptorPoolManager(VkGraphicsDevice gd)
         {
             _gd = gd;
-            _pools.Add(CreateNewPool());
+            _pools.Add(CreateNewPool(default));
         }
 
         public unsafe DescriptorAllocationToken AllocateBindless(DescriptorResourceCounts counts, VkDescriptorSetLayout setLayout)
         {
             lock (_lock)
             {
-
-                uint maxBinding = 1;
+                uint total = counts.Total;
+                uint max_binding = 1024;
                 VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo = new()
                 {
                     sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
                     descriptorSetCount = 1,
-                    pDescriptorCounts = &maxBinding
+                    pDescriptorCounts = &max_binding
                 };
                 VkDescriptorPool pool = GetPool(counts);
                 VkDescriptorSetAllocateInfo dsAI = new()
@@ -92,35 +93,45 @@ namespace Veldrid.Vulkan
                 }
             }
 
-            PoolInfo newPool = CreateNewPool();
+            PoolInfo newPool = CreateNewPool(counts);
             _pools.Add(newPool);
             bool result = newPool.Allocate(counts);
             Debug.Assert(result);
             return newPool.Pool;
         }
 
-        private unsafe PoolInfo CreateNewPool()
+        private unsafe PoolInfo CreateNewPool(DescriptorResourceCounts counts)
         {
-            uint totalSets = 1000;
-            uint descriptorCount = 100;
-            uint poolSizeCount = 8;
+            uint uniformBufferCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.UniformBufferCount));
+            uint sampledImageCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.SampledImageCount));
+            uint samplerCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.SamplerCount));
+            uint storageBufferCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.StorageBufferCount));
+            uint storageImageCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.StorageImageCount));
+            uint poolSizeCount = 7;
             VkDescriptorPoolSize* sizes = stackalloc VkDescriptorPoolSize[(int)poolSizeCount];
             sizes[0].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            sizes[0].descriptorCount = descriptorCount;
+            sizes[0].descriptorCount = uniformBufferCount;
             sizes[1].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-            sizes[1].descriptorCount = descriptorCount;
+            sizes[1].descriptorCount = sampledImageCount;
             sizes[2].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_SAMPLER;
-            sizes[2].descriptorCount = descriptorCount;
+            sizes[2].descriptorCount = samplerCount;
             sizes[3].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            sizes[3].descriptorCount = descriptorCount;
+            sizes[3].descriptorCount = storageBufferCount;
             sizes[4].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            sizes[4].descriptorCount = descriptorCount;
+            sizes[4].descriptorCount = storageImageCount;
             sizes[5].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-            sizes[5].descriptorCount = descriptorCount;
+            sizes[5].descriptorCount = uniformBufferCount;
             sizes[6].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-            sizes[6].descriptorCount = descriptorCount;
-            sizes[7].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            sizes[7].descriptorCount = descriptorCount;
+            sizes[6].descriptorCount = storageBufferCount;
+            //Not supported by veldrid
+            //sizes[7].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            //sizes[7].descriptorCount = 0;
+            uint descriptorCount = 0;
+            for (int i = 0; i < poolSizeCount; i++)
+            {
+                descriptorCount += sizes[i].descriptorCount;
+            }
+            uint totalSets = descriptorCount * poolSizeCount;
 
             VkDescriptorPoolCreateInfo poolCI = new()
             {
@@ -135,7 +146,7 @@ namespace Veldrid.Vulkan
             VkResult result = vkCreateDescriptorPool(_gd.Device, &poolCI, null, &descriptorPool);
             VulkanUtil.CheckResult(result);
 
-            return new PoolInfo(descriptorPool, totalSets, descriptorCount);
+            return new PoolInfo(descriptorPool, totalSets, uniformBufferCount, sampledImageCount, samplerCount, storageBufferCount, storageImageCount);
         }
 
         internal unsafe void DestroyAll()
@@ -167,6 +178,17 @@ namespace Veldrid.Vulkan
                 SamplerCount = descriptorCount;
                 StorageBufferCount = descriptorCount;
                 StorageImageCount = descriptorCount;
+            }
+
+            public PoolInfo(VkDescriptorPool pool, uint totalSets, uint uniformBufferCount, uint sampledImageCount, uint samplerCount, uint storageBufferCount, uint storageImageCount)
+            {
+                Pool = pool;
+                RemainingSets = totalSets;
+                UniformBufferCount = uniformBufferCount;
+                SampledImageCount = sampledImageCount;
+                SamplerCount = samplerCount;
+                StorageBufferCount = storageBufferCount;
+                StorageImageCount = storageImageCount;
             }
 
             internal bool Allocate(DescriptorResourceCounts counts)

@@ -8,6 +8,8 @@
         public readonly uint StorageBufferCount;
         public readonly uint StorageImageCount;
 
+        public readonly uint Total => UniformBufferCount + SampledImageCount + SamplerCount + StorageBufferCount + StorageImageCount;
+
         public DescriptorResourceCounts(
             uint uniformBufferCount,
             uint sampledImageCount,

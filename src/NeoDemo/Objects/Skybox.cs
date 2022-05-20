@@ -22,8 +22,10 @@ namespace Veldrid.NeoDemo.Objects
         private Pipeline _pipeline;
         private Pipeline _reflectionPipeline;
         private ResourceSet _resourceSet;
+        private ResourceSet _resourceSet2;
         private readonly DisposeCollector _disposeCollector = new();
-
+        private ResourceLayout _layout;
+        private ResourceLayout _layout2;
         public Skybox(
             Image<Rgba32> front, Image<Rgba32> back, Image<Rgba32> left,
             Image<Rgba32> right, Image<Rgba32> top, Image<Rgba32> bottom)
@@ -47,13 +49,13 @@ namespace Veldrid.NeoDemo.Objects
             cl.UpdateBuffer(_ib, 0, s_indices);
 
             _ab = factory.CreateBuffer(new BufferDescription(gd.UniformBufferMinOffsetAlignment, BufferUsage.UniformBuffer));
-            cl.UpdateBuffer(_ib, 0, 1);
+            cl.UpdateBuffer(_ab, 0, 1);
 
             ImageSharpCubemapTexture imageSharpCubemapTexture = new(_right, _left, _top, _bottom, _back, _front, false);
 
             Texture textureCube = imageSharpCubemapTexture.CreateDeviceTexture(gd, factory);
             TextureView textureView = factory.CreateTextureView(new TextureViewDescription(textureCube));
-
+            TextureView textureView2 = factory.CreateTextureView(new TextureViewDescription(textureCube));
             VertexLayoutDescription[] vertexLayouts = new VertexLayoutDescription[]
             {
                 new VertexLayoutDescription(
@@ -62,11 +64,14 @@ namespace Veldrid.NeoDemo.Objects
 
             (Shader vs, Shader fs) = StaticResourceCache.GetShaders(gd, gd.ResourceFactory, "Skybox");
 
-            _layout = factory.CreateResourceLayout(new ResourceLayoutDescription(true,
+            _layout = factory.CreateResourceLayout(new ResourceLayoutDescription(
                 new ResourceLayoutElementDescription("Projection", ResourceKind.UniformBuffer, ShaderStages.Vertex),
                 new ResourceLayoutElementDescription("View", ResourceKind.UniformBuffer, ShaderStages.Vertex),
                 new ResourceLayoutElementDescription("CubeSampler", ResourceKind.Sampler, ShaderStages.Fragment),
-                new ResourceLayoutElementDescription("b", ResourceKind.UniformBuffer, ShaderStages.Fragment),
+                new ResourceLayoutElementDescription("b", ResourceKind.UniformBuffer, ShaderStages.Fragment)
+                ));
+
+            _layout2 = factory.CreateResourceLayout(new ResourceLayoutDescription(true,
                 new ResourceLayoutElementDescription("CubeTexture", ResourceKind.TextureReadOnly, ShaderStages.Fragment)));
 
             GraphicsPipelineDescription pd = new(
@@ -75,7 +80,7 @@ namespace Veldrid.NeoDemo.Objects
                 new RasterizerStateDescription(FaceCullMode.None, PolygonFillMode.Solid, FrontFace.Clockwise, true, true),
                 PrimitiveTopology.TriangleList,
                 new ShaderSetDescription(vertexLayouts, new[] { vs, fs }, ShaderHelper.GetSpecializations(gd)),
-                new ResourceLayout[] { _layout },
+                new ResourceLayout[] { _layout, _layout2 },
                 sc.MainSceneFramebuffer.OutputDescription);
 
             _pipeline = factory.CreateGraphicsPipeline(pd);
@@ -87,10 +92,14 @@ namespace Veldrid.NeoDemo.Objects
                 sc.ProjectionMatrixBuffer,
                 sc.ViewMatrixBuffer,
                 gd.PointSampler,
-                _ab,
-                textureView,
-                textureView
+                _ab
                 ));
+
+            _resourceSet2 = factory.CreateResourceSet(new ResourceSetDescription(
+            _layout2,
+            textureView,
+            textureView2
+            ));
 
             _disposeCollector.Add(_vb, _ib, textureCube, textureView, _layout, _pipeline, _reflectionPipeline, _resourceSet, vs, fs);
         }
@@ -121,6 +130,7 @@ namespace Veldrid.NeoDemo.Objects
             cl.SetIndexBuffer(_ib, IndexFormat.UInt16);
             cl.SetPipeline(renderPass == RenderPasses.ReflectionMap ? _reflectionPipeline : _pipeline);
             cl.SetGraphicsResourceSet(0, _resourceSet);
+            cl.SetGraphicsResourceSet(1, _resourceSet2);
             Texture texture = renderPass == RenderPasses.ReflectionMap ? sc.ReflectionColorTexture : sc.MainSceneColorTexture;
             float depth = gd.IsDepthRangeZeroToOne ? 0 : 1;
             cl.SetViewport(0, new Viewport(0, 0, texture.Width, texture.Height, depth, depth));
@@ -178,6 +188,6 @@ namespace Veldrid.NeoDemo.Objects
             16,17,18, 16,18,19,
             20,21,22, 20,22,23,
         };
-        private ResourceLayout _layout;
+
     }
 }

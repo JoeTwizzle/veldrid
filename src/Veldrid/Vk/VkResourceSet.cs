@@ -43,25 +43,17 @@ namespace Veldrid.Vulkan
                 _descriptorAllocationToken = _gd.DescriptorPoolManager.Allocate(_descriptorCounts, dsl);
             }
 
-
+            int descriptorWriteCount = vkLayout.Description.Elements.Length;
             BindableResource[] boundResources = description.BoundResources;
-            uint descriptorWriteCount = (uint)boundResources.Length;
-            VkWriteDescriptorSet* descriptorWrites = stackalloc VkWriteDescriptorSet[(int)descriptorWriteCount];
-            VkDescriptorBufferInfo* bufferInfos = stackalloc VkDescriptorBufferInfo[(int)descriptorWriteCount];
-            VkDescriptorImageInfo* imageInfos = stackalloc VkDescriptorImageInfo[(int)descriptorWriteCount];
+            uint resourceCounts = (uint)boundResources.Length;
+            VkWriteDescriptorSet* descriptorWrites = stackalloc VkWriteDescriptorSet[descriptorWriteCount];
+            VkDescriptorBufferInfo* bufferInfos = stackalloc VkDescriptorBufferInfo[(int)resourceCounts];
+            VkDescriptorImageInfo* imageInfos = stackalloc VkDescriptorImageInfo[(int)resourceCounts];
             for (int i = 0; i < descriptorWriteCount; i++)
             {
-
                 VkDescriptorType type;
 
-                if (vkLayout.Description.LastElementParams)
-                {
-                    type = vkLayout.DescriptorTypes[System.Math.Min(i, vkLayout.Description.Elements.Length - 1)];
-                }
-                else
-                {
-                    type = vkLayout.DescriptorTypes[i];
-                }
+                type = vkLayout.DescriptorTypes[i];
                 descriptorWrites[i] = new VkWriteDescriptorSet()
                 {
                     sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -70,11 +62,37 @@ namespace Veldrid.Vulkan
                     dstBinding = (uint)System.Math.Min(i, vkLayout.Description.Elements.Length - 1),
                     dstSet = _descriptorAllocationToken.Set
                 };
+                if (type == VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+                type == VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+                type == VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
+                type == VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+                {
+                    descriptorWrites[i].pBufferInfo = &bufferInfos[i];
+                }
+                else if (type == VkDescriptorType.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)
+                {
+                    descriptorWrites[i].pImageInfo = &imageInfos[i];
+                }
+                else if (type == VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
+                {
+                    descriptorWrites[i].pImageInfo = &imageInfos[i];
+                }
+                else if (type == VkDescriptorType.VK_DESCRIPTOR_TYPE_SAMPLER)
+                {
+                    descriptorWrites[i].pImageInfo = &imageInfos[i];
+                }
+            }
+            for (int i = 0; i < resourceCounts; i++)
+            {
+                VkDescriptorType type;
+
+                int boundedIndex = System.Math.Min(i, descriptorWriteCount - 1);
+                type = vkLayout.DescriptorTypes[boundedIndex];
 
                 if (type == VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-                    type == VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
-                    type == VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
-                    type == VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+                        type == VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
+                        type == VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
+                        type == VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
                 {
                     DeviceBufferRange range = Util.GetBufferRange(boundResources[i], 0);
                     VkBuffer rangedVkBuffer = Util.AssertSubtype<DeviceBuffer, VkBuffer>(range.Buffer);
@@ -84,7 +102,6 @@ namespace Veldrid.Vulkan
                         offset = range.Offset,
                         range = range.SizeInBytes
                     };
-                    descriptorWrites[i].pBufferInfo = &bufferInfos[i];
                     _refCounts.Add(rangedVkBuffer.RefCount);
                 }
                 else if (type == VkDescriptorType.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE)
@@ -96,7 +113,6 @@ namespace Veldrid.Vulkan
                         imageView = vkTexView.ImageView,
                         imageLayout = VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                     };
-                    descriptorWrites[i].pImageInfo = &imageInfos[i];
                     _sampledTextures.Add(Util.AssertSubtype<Texture, VkTexture>(texView.Target));
                     _refCounts.Add(vkTexView.RefCount);
                 }
@@ -109,7 +125,6 @@ namespace Veldrid.Vulkan
                         imageView = vkTexView.ImageView,
                         imageLayout = VkImageLayout.VK_IMAGE_LAYOUT_GENERAL
                     };
-                    descriptorWrites[i].pImageInfo = &imageInfos[i];
                     _storageImages.Add(Util.AssertSubtype<Texture, VkTexture>(texView.Target));
                     _refCounts.Add(vkTexView.RefCount);
                 }
@@ -117,12 +132,17 @@ namespace Veldrid.Vulkan
                 {
                     VkSampler sampler = Util.AssertSubtype<BindableResource, VkSampler>(boundResources[i]);
                     imageInfos[i] = new VkDescriptorImageInfo() { sampler = sampler.DeviceSampler };
-                    descriptorWrites[i].pImageInfo = &imageInfos[i];
                     _refCounts.Add(sampler.RefCount);
                 }
             }
 
-            vkUpdateDescriptorSets(_gd.Device, descriptorWriteCount, descriptorWrites, 0, null);
+            //Change the last descriptorWrites instance to reflect arrayness
+            if (vkLayout.Description.LastElementParams)
+            {
+                descriptorWrites[descriptorWriteCount - 1].descriptorCount = (uint)(resourceCounts - descriptorWriteCount) + 1;
+            }
+
+            vkUpdateDescriptorSets(_gd.Device, (uint)descriptorWriteCount, descriptorWrites, 0, null);
         }
 
         public override string? Name

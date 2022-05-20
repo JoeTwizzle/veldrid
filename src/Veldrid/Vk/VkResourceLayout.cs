@@ -33,10 +33,13 @@ namespace Veldrid.Vulkan
             uint samplerCount = 0;
             uint storageBufferCount = 0;
             uint storageImageCount = 0;
-
+            //Only the last element may have variable length
+            if (description.LastElementParams && elements.Length != 1)
+            {
+                throw new System.ArgumentException("Bindless Layouts must only consist of one member");
+            }
             for (uint i = 0; i < elements.Length; i++)
             {
-
                 bindings[i].binding = i;
                 bindings[i].descriptorCount = 1;
                 VkDescriptorType descriptorType = VkFormats.VdToVkDescriptorType(elements[i].Kind, elements[i].Options);
@@ -46,29 +49,28 @@ namespace Veldrid.Vulkan
                 {
                     DynamicBufferCount += 1;
                 }
-                //Only the last element may have variable length
+                _descriptorTypes[i] = descriptorType;
                 if (description.LastElementParams && i == elements.Length - 1)
                 {
+                    bindings[i].descriptorCount = 1024 - i;
                     bindless_flags[i] = VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
                 }
-                _descriptorTypes[i] = descriptorType;
-      
                 switch (descriptorType)
                 {
                     case VkDescriptorType.VK_DESCRIPTOR_TYPE_SAMPLER:
-                        samplerCount += 1;
+                        samplerCount += bindings[i].descriptorCount;
                         break;
                     case VkDescriptorType.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-                        sampledImageCount += 1;
+                        sampledImageCount += bindings[i].descriptorCount;
                         break;
                     case VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-                        storageImageCount += 1;
+                        storageImageCount += bindings[i].descriptorCount;
                         break;
                     case VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-                        uniformBufferCount += 1;
+                        uniformBufferCount += bindings[i].descriptorCount;
                         break;
                     case VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-                        storageBufferCount += 1;
+                        storageBufferCount += bindings[i].descriptorCount;
                         break;
                 }
             }
@@ -100,7 +102,7 @@ namespace Veldrid.Vulkan
             {
                 dslCI.pNext = &extendedInfo;
             }
-            
+
             VkDescriptorSetLayout dsl;
             VkResult result = vkCreateDescriptorSetLayout(_gd.Device, &dslCI, null, &dsl);
             CheckResult(result);
