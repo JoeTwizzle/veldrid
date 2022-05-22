@@ -169,6 +169,8 @@ namespace Veldrid.MTL
                 case PixelFormat.BC4_SNorm:
                 case PixelFormat.BC5_UNorm:
                 case PixelFormat.BC5_SNorm:
+                case PixelFormat.BC6_SFloat:
+                case PixelFormat.BC6_UFloat:
                 case PixelFormat.BC7_UNorm:
                 case PixelFormat.BC7_UNorm_SRgb:
                     return metalFeatures.IsSupported(MTLFeatureSet.macOS_GPUFamily1_v1)
