@@ -119,6 +119,10 @@ namespace Veldrid.MTL
                     return MTLPixelFormat.BC5_RGUnorm;
                 case PixelFormat.BC5_SNorm:
                     return MTLPixelFormat.BC5_RGSnorm;
+                case PixelFormat.BC6_SFloat:
+                    return MTLPixelFormat.BC6H_RGBFloat;
+                case PixelFormat.BC6_UFloat:
+                    return MTLPixelFormat.BC6H_RGBUfloat;
                 case PixelFormat.BC7_UNorm:
                     return MTLPixelFormat.BC7_RGBAUnorm;
                 case PixelFormat.BC7_UNorm_SRgb:

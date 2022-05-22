@@ -120,6 +120,10 @@ namespace Veldrid.D3D11
                     return Format.BC5_UNorm;
                 case PixelFormat.BC5_SNorm:
                     return Format.BC5_SNorm;
+                case PixelFormat.BC6_SFloat:
+                    return Format.BC6H_Sf16;
+                case PixelFormat.BC6_UFloat:
+                    return Format.BC6H_Uf16;
                 case PixelFormat.BC7_UNorm:
                     return Format.BC7_UNorm;
                 case PixelFormat.BC7_UNorm_SRgb:
@@ -246,6 +250,9 @@ namespace Veldrid.D3D11
                 case Format.BC5_UNorm:
                 case Format.BC5_SNorm:
                     return Format.BC5_Typeless;
+                case Format.BC6H_Uf16:
+                case Format.BC6H_Sf16:
+                    return Format.BC6H_Typeless;
                 case Format.B8G8R8A8_Typeless:
                 case Format.B8G8R8A8_UNorm:
                 case Format.B8G8R8A8_UNorm_SRgb:
@@ -434,6 +441,8 @@ namespace Veldrid.D3D11
                 Format.BC4_SNorm => PixelFormat.BC4_SNorm,
                 Format.BC5_UNorm => PixelFormat.BC5_UNorm,
                 Format.BC5_SNorm => PixelFormat.BC5_SNorm,
+                Format.BC6H_Sf16 => PixelFormat.BC6_SFloat,
+                Format.BC6H_Uf16 => PixelFormat.BC6_UFloat,
                 Format.BC7_UNorm => PixelFormat.BC7_UNorm,
                 Format.D24_UNorm_S8_UInt => PixelFormat.D24_UNorm_S8_UInt,
                 Format.D32_Float_S8X24_UInt => PixelFormat.D32_Float_S8_UInt,

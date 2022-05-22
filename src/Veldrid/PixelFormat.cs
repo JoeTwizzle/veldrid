@@ -230,6 +230,14 @@
         /// </summary>
         BC5_SNorm,
         /// <summary>
+        /// BC6 block compressed format, signed float values.
+        /// </summary>
+        BC6_SFloat,
+        /// <summary>
+        /// BC6 block compressed format, unsigned float values.
+        /// </summary>
+        BC6_UFloat,
+        /// <summary>
         /// BC7 block compressed format.
         /// </summary>
         BC7_UNorm,

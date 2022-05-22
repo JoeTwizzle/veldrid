@@ -85,6 +85,8 @@ namespace Veldrid.OpenGL
                 PixelFormat.BC4_SNorm => PixelInternalFormat.CompressedSignedRedRgtc1,
                 PixelFormat.BC5_UNorm => PixelInternalFormat.CompressedRgRgtc2,
                 PixelFormat.BC5_SNorm => PixelInternalFormat.CompressedSignedRgRgtc2,
+                PixelFormat.BC6_SFloat => PixelInternalFormat.CompressedRgbBptcSignedFloat,
+                PixelFormat.BC6_UFloat => PixelInternalFormat.CompressedRgbBptcUnsignedFloat,
                 PixelFormat.BC7_UNorm => PixelInternalFormat.CompressedRgbaBptcUnorm,
                 PixelFormat.BC7_UNorm_SRgb => PixelInternalFormat.CompressedSrgbAlphaBptcUnorm,
                 PixelFormat.ETC2_R8_G8_B8_UNorm => PixelInternalFormat.CompressedRgb8Etc2,
@@ -157,6 +159,8 @@ namespace Veldrid.OpenGL
                 case PixelFormat.R16_G16_B16_A16_UNorm:
                 case PixelFormat.R16_G16_B16_A16_Float:
                 case PixelFormat.R32_G32_B32_A32_Float:
+                case PixelFormat.BC6_SFloat:
+                case PixelFormat.BC6_UFloat:
                     return GLPixelFormat.Rgba;
 
                 case PixelFormat.B8_G8_R8_A8_UNorm:
@@ -254,6 +258,8 @@ namespace Veldrid.OpenGL
                 case PixelFormat.R16_Float:
                 case PixelFormat.R16_G16_Float:
                 case PixelFormat.R16_G16_B16_A16_Float:
+                case PixelFormat.BC6_SFloat:
+                case PixelFormat.BC6_UFloat:
                     return GLPixelType.HalfFloat;
                 case PixelFormat.R32_Float:
                 case PixelFormat.R32_G32_Float:
@@ -408,6 +414,10 @@ namespace Veldrid.OpenGL
                     return (SizedInternalFormat)PixelInternalFormat.CompressedRgRgtc2;
                 case PixelFormat.BC5_SNorm:
                     return (SizedInternalFormat)PixelInternalFormat.CompressedSignedRgRgtc2;
+                case PixelFormat.BC6_SFloat:
+                    return (SizedInternalFormat)PixelInternalFormat.CompressedRgbBptcSignedFloat;
+                case PixelFormat.BC6_UFloat:
+                    return (SizedInternalFormat)PixelInternalFormat.CompressedRgbBptcUnsignedFloat;
                 case PixelFormat.BC7_UNorm:
                     return (SizedInternalFormat)PixelInternalFormat.CompressedRgbaBptcUnorm;
                 case PixelFormat.BC7_UNorm_SRgb:
@@ -597,6 +607,8 @@ namespace Veldrid.OpenGL
                 case PixelFormat.BC5_SNorm:
                     return extensions.GLVersion(3, 0) || extensions.IsExtensionSupported("GL_ARB_texture_compression_rgtc");
 
+                case PixelFormat.BC6_SFloat:
+                case PixelFormat.BC6_UFloat:
                 case PixelFormat.BC7_UNorm:
                 case PixelFormat.BC7_UNorm_SRgb:
                     return extensions.GLVersion(4, 2) || extensions.IsExtensionSupported("GL_ARB_texture_compression_bptc")

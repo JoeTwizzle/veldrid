@@ -420,6 +420,8 @@ namespace Veldrid.Vulkan
                 VK_FORMAT_BC4_SNORM_BLOCK => PixelFormat.BC4_SNorm,
                 VK_FORMAT_BC5_UNORM_BLOCK => PixelFormat.BC5_UNorm,
                 VK_FORMAT_BC5_SNORM_BLOCK => PixelFormat.BC5_SNorm,
+                VK_FORMAT_BC6H_SFLOAT_BLOCK => PixelFormat.BC6_SFloat,
+                VK_FORMAT_BC6H_UFLOAT_BLOCK => PixelFormat.BC6_UFloat,
                 VK_FORMAT_BC7_UNORM_BLOCK => PixelFormat.BC7_UNorm,
                 VK_FORMAT_BC7_SRGB_BLOCK => PixelFormat.BC7_UNorm_SRgb,
                 VK_FORMAT_A2B10G10R10_UNORM_PACK32 => PixelFormat.R10_G10_B10_A2_UNorm,
