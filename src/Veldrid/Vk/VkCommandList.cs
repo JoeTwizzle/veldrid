@@ -37,6 +37,11 @@ namespace Veldrid.Vulkan
 
         private bool _newFramebuffer; // Render pass cycle state
 
+        private bool _vertexBindingsChanged = false;
+        private uint _numVertexBindings = 0;
+        private VulkanBuffer[] _vertexBindings = new VulkanBuffer[1];
+        private ulong[] _vertexOffsets = new ulong[1];
+
         // Compute State
         private VkPipeline? _currentComputePipeline;
         private BoundResourceSetInfo[] _currentComputeResourceSets = Array.Empty<BoundResourceSetInfo>();
@@ -48,8 +53,8 @@ namespace Veldrid.Vulkan
         private readonly List<VkCommandBuffer> _submittedCommandBuffers = new();
 
         private StagingResourceInfo _currentStagingInfo = null!;
-        private readonly ConcurrentDictionary<VkCommandBuffer, StagingResourceInfo> _submittedStagingInfos = new();
-        private readonly ConcurrentStack<StagingResourceInfo> _availableStagingInfos = new();
+        private readonly Dictionary<VkCommandBuffer, StagingResourceInfo> _submittedStagingInfos = new();
+        private readonly ConcurrentQueue<StagingResourceInfo> _availableStagingInfos = new();
         private readonly List<VkBuffer> _availableStagingBuffers = new();
 
         public VkCommandPool CommandPool => _pool;
@@ -109,13 +114,12 @@ namespace Veldrid.Vulkan
 
             VkCommandBuffer cb = _cb;
 
-            if (!_submittedStagingInfos.TryAdd(cb, _currentStagingInfo))
-            {
-                throw new InvalidOperationException();
-            }
-
             lock (_commandBufferListLock)
             {
+                if (!_submittedStagingInfos.TryAdd(cb, _currentStagingInfo))
+                {
+                    throw new InvalidOperationException();
+                }
                 _submittedCommandBuffers.Add(cb);
             }
 
@@ -139,10 +143,11 @@ namespace Veldrid.Vulkan
                         i -= 1;
                     }
                 }
-            }
 
-            if (_submittedStagingInfos.TryRemove(completedCB, out StagingResourceInfo? info))
-            {
+                if (!_submittedStagingInfos.Remove(completedCB, out StagingResourceInfo? info))
+                {
+                    throw new InvalidOperationException();
+                }
                 RecycleStagingInfo(info);
             }
 
@@ -192,6 +197,10 @@ namespace Veldrid.Vulkan
             _currentGraphicsPipeline = null;
             ClearSets(_currentGraphicsResourceSets);
             Util.ClearArray(_scissorRects);
+
+            _numVertexBindings = 0;
+            Util.ClearArray(_vertexBindings);
+            Util.ClearArray(_vertexOffsets);
 
             _currentComputePipeline = null;
             ClearSets(_currentComputeResourceSets);
@@ -312,6 +321,12 @@ namespace Veldrid.Vulkan
 
         private void PreDrawCommand()
         {
+            if (_vertexBindingsChanged)
+            {
+                _vertexBindingsChanged = false;
+                FlushVertexBindings();
+            }
+
             TransitionImages(_preDrawSampledImages, VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
             _preDrawSampledImages.Clear();
 
@@ -323,6 +338,19 @@ namespace Veldrid.Vulkan
                 (int)_currentGraphicsPipeline!.ResourceSetCount,
                 VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS,
                 _currentGraphicsPipeline.PipelineLayout);
+        }
+
+        private unsafe void FlushVertexBindings()
+        {
+            fixed (VulkanBuffer* vertexBindings = _vertexBindings)
+            fixed (ulong* vertexOffsets = _vertexOffsets)
+            {
+                vkCmdBindVertexBuffers(
+                    _cb,
+                    0, _numVertexBindings,
+                    vertexBindings,
+                    vertexOffsets);
+            }
         }
 
         private void FlushNewResourceSets(
@@ -681,10 +709,19 @@ namespace Veldrid.Vulkan
         private protected override void SetVertexBufferCore(uint index, DeviceBuffer buffer, uint offset)
         {
             VkBuffer vkBuffer = Util.AssertSubtype<DeviceBuffer, VkBuffer>(buffer);
-            VulkanBuffer deviceBuffer = vkBuffer.DeviceBuffer;
-            ulong offset64 = offset;
-            _currentStagingInfo.AddResource(vkBuffer.RefCount);
-            vkCmdBindVertexBuffers(_cb, index, 1, &deviceBuffer, &offset64);
+            bool differentBuffer = _vertexBindings[index] != vkBuffer.DeviceBuffer;
+            if (differentBuffer || _vertexOffsets[index] != offset)
+            {
+                _vertexBindingsChanged = true;
+                if (differentBuffer)
+                {
+                    _currentStagingInfo.AddResource(vkBuffer.RefCount);
+                }
+
+                _vertexBindings[index] = vkBuffer.DeviceBuffer;
+                _vertexOffsets[index] = offset;
+                _numVertexBindings = Math.Max((index + 1), _numVertexBindings);
+            }
         }
 
         private protected override void SetIndexBufferCore(DeviceBuffer buffer, IndexFormat format, uint offset)
@@ -704,6 +741,10 @@ namespace Veldrid.Vulkan
                 Util.EnsureArrayMinimumSize(ref _graphicsResourceSetsChanged, vkPipeline.ResourceSetCount);
                 vkCmdBindPipeline(_cb, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline.DevicePipeline);
                 _currentGraphicsPipeline = vkPipeline;
+
+                uint vertexBufferCount = vkPipeline.VertexLayoutCount;
+                Util.EnsureArrayMinimumSize(ref _vertexBindings, vertexBufferCount);
+                Util.EnsureArrayMinimumSize(ref _vertexOffsets, vertexBufferCount);
             }
             else if (pipeline.IsComputePipeline && _currentComputePipeline != pipeline)
             {
@@ -717,7 +758,7 @@ namespace Veldrid.Vulkan
             _currentStagingInfo.AddResource(vkPipeline.RefCount);
         }
 
-        private void ClearSets(Span<BoundResourceSetInfo> boundSets)
+        private static void ClearSets(Span<BoundResourceSetInfo> boundSets)
         {
             foreach (ref BoundResourceSetInfo boundSetInfo in boundSets)
             {
@@ -1350,7 +1391,7 @@ namespace Veldrid.Vulkan
         }
 
         [SkipLocalsInit]
-        private protected override void PushDebugGroupCore(string name)
+        private protected override void PushDebugGroupCore(ReadOnlySpan<char> name)
         {
             Span<byte> byteBuffer = stackalloc byte[1024];
 
@@ -1384,7 +1425,7 @@ namespace Veldrid.Vulkan
         }
 
         [SkipLocalsInit]
-        private protected override void InsertDebugMarkerCore(string name)
+        private protected override void InsertDebugMarkerCore(ReadOnlySpan<char> name)
         {
             Span<byte> byteBuffer = stackalloc byte[1024];
 
@@ -1420,6 +1461,11 @@ namespace Veldrid.Vulkan
 
                 Debug.Assert(_submittedStagingInfos.Count == 0);
 
+                if (_currentStagingInfo != null)
+                {
+                    RecycleStagingInfo(_currentStagingInfo);
+                }
+
                 foreach (VkBuffer buffer in _availableStagingBuffers)
                 {
                     buffer.Dispose();
@@ -1449,7 +1495,7 @@ namespace Veldrid.Vulkan
 
         private StagingResourceInfo GetStagingResourceInfo()
         {
-            if (!_availableStagingInfos.TryPop(out StagingResourceInfo? ret))
+            if (!_availableStagingInfos.TryDequeue(out StagingResourceInfo? ret))
             {
                 ret = new StagingResourceInfo();
             }
@@ -1473,7 +1519,7 @@ namespace Veldrid.Vulkan
 
             info.Clear();
 
-            _availableStagingInfos.Push(info);
+            _availableStagingInfos.Enqueue(info);
         }
     }
 }
