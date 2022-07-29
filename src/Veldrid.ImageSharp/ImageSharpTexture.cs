@@ -130,14 +130,13 @@ namespace Veldrid.ImageSharp
                 {
                     var group = image.GetPixelMemoryGroup();
                     int startY = 0;
+                    
                     int remainder = 0;
                     foreach (var memory in group)
                     {
                         fixed (void* pixelPtr = memory.Span)
                         {
-                            remainder = ((remainder + memory.Length) % ((int)PixelSizeInBytes * image.Width));
-                            int lineCount = (remainder + memory.Length) / ((int)PixelSizeInBytes * image.Width);
-                            if (lineCount > 0)
+                            if (remainder != 0)
                             {
                                 gd.UpdateTexture(
                                     tex,
@@ -146,12 +145,43 @@ namespace Veldrid.ImageSharp
                                     (uint)0,
                                     (uint)startY,
                                     0,
+                                    (uint)remainder,
+                                    1,
+                                    1,
+                                    (uint)level,
+                                    0);
+                                startY++;
+                            }
+                            int excess = memory.Length % ((int)PixelSizeInBytes * image.Width);
+                            int lineCount = memory.Length / ((int)PixelSizeInBytes * image.Width);
+                            gd.UpdateTexture(
+                                    tex,
+                                    (IntPtr)pixelPtr,
+                                    (uint)(PixelSizeInBytes * memory.Span.Length),
+                                    0,
+                                    (uint)startY,
+                                    0,
                                     (uint)image.Width,
                                     (uint)(startY + lineCount),
                                     1,
                                     (uint)level,
                                     0);
+                            if (excess != 0)
+                            {
+                                gd.UpdateTexture(
+                                    tex,
+                                    (IntPtr)pixelPtr,
+                                    (uint)(PixelSizeInBytes * memory.Span.Length),
+                                    (uint)0,
+                                    (uint)(startY + lineCount),
+                                    0,
+                                    (uint)excess,
+                                    1,
+                                    1,
+                                    (uint)level,
+                                    0);
                             }
+                            remainder = (image.Width - excess) % image.Width;
                             startY += lineCount;
                         }
                     }
