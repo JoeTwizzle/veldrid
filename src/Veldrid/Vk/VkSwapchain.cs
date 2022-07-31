@@ -114,7 +114,11 @@ namespace Veldrid.Vulkan
                 RecreateAndReacquire(_framebuffer.Width, _framebuffer.Height);
                 return false;
             }
-
+            if (vkGetFenceStatus(_gd.Device, fence) == VkResult.VK_SUCCESS)
+            {
+                vkWaitForFences(_gd.Device, 1, &fence, true, ulong.MaxValue);
+                vkResetFences(_gd.Device, 1, &fence);
+            }
             uint imageIndex = _currentImageIndex;
             VkResult result = vkAcquireNextImageKHR(
                 device,
@@ -141,6 +145,7 @@ namespace Veldrid.Vulkan
 
         private void RecreateAndReacquire(uint width, uint height)
         {
+            vkDeviceWaitIdle(_gd.Device);
             if (CreateSwapchain(width, height))
             {
                 VulkanFence imageAvailableFence = _imageAvailableFence;
