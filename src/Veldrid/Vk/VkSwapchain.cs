@@ -346,6 +346,13 @@ namespace Veldrid.Vulkan
             if (!_disposed)
             {
                 _disposed = true;
+                var fence = _imageAvailableFence;
+                vkDeviceWaitIdle(_gd.Device);
+                if (vkGetFenceStatus(_gd.Device, fence) == VkResult.VK_SUCCESS)
+                {
+                    vkWaitForFences(_gd.Device, 1, &fence, true, ulong.MaxValue);
+                    vkResetFences(_gd.Device, 1, &fence);
+                }
                 vkDestroyFence(_gd.Device, _imageAvailableFence, null);
                 _framebuffer.Dispose();
                 vkDestroySwapchainKHR(_gd.Device, _deviceSwapchain, null);
