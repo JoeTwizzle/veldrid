@@ -5,7 +5,7 @@ using Veldrid.OpenGL.EntryList;
 
 namespace Veldrid.OpenGL
 {
-    internal class OpenGLCommandList : CommandList
+    internal sealed class OpenGLCommandList : CommandList
     {
         private readonly OpenGLGraphicsDevice _gd;
         private OpenGLCommandEntryList _currentCommands = null!;
@@ -140,9 +140,9 @@ namespace Veldrid.OpenGL
             _currentCommands.SetVertexBuffer(index, buffer, offset);
         }
 
-        public override void SetViewport(uint index, ref Viewport viewport)
+        public override void SetViewport(uint index, in Viewport viewport)
         {
-            _currentCommands.SetViewport(index, ref viewport);
+            _currentCommands.SetViewport(index, viewport);
         }
 
         internal void Reset()

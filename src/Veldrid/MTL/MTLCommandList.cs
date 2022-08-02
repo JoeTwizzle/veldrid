@@ -4,7 +4,7 @@ using Veldrid.MetalBindings;
 
 namespace Veldrid.MTL
 {
-    internal unsafe class MTLCommandList : CommandList
+    internal sealed unsafe class MTLCommandList : CommandList
     {
         private readonly MTLGraphicsDevice _gd;
         private MTLCommandBuffer _cb;
@@ -314,7 +314,7 @@ namespace Veldrid.MTL
             _scissorRects[index] = new MTLScissorRect(x, y, width, height);
         }
 
-        public override void SetViewport(uint index, ref Viewport viewport)
+        public override void SetViewport(uint index, in Viewport viewport)
         {
             _viewportsChanged = true;
             _viewports[index] = new MTLViewport(

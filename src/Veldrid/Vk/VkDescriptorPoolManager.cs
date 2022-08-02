@@ -6,7 +6,7 @@ using static TerraFX.Interop.Vulkan.Vulkan;
 
 namespace Veldrid.Vulkan
 {
-    internal class VkDescriptorPoolManager
+    internal sealed class VkDescriptorPoolManager
     {
         private readonly VkGraphicsDevice _gd;
         private readonly List<PoolInfo> _pools = new();
@@ -157,7 +157,7 @@ namespace Veldrid.Vulkan
             }
         }
 
-        private class PoolInfo
+        private sealed class PoolInfo
         {
             public readonly VkDescriptorPool Pool;
 

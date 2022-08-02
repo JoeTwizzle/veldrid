@@ -2,12 +2,11 @@
 using static Veldrid.OpenGLBinding.OpenGLNative;
 using static Veldrid.OpenGL.OpenGLUtil;
 using Veldrid.OpenGLBinding;
-using System.Text;
 using System.Runtime.CompilerServices;
 
 namespace Veldrid.OpenGL
 {
-    internal unsafe class OpenGLCommandExecutor
+    internal sealed unsafe class OpenGLCommandExecutor
     {
         private readonly OpenGLGraphicsDevice _gd;
         private readonly GraphicsBackend _backend;
@@ -26,7 +25,6 @@ namespace Veldrid.OpenGL
         private uint[] _vbOffsets = Array.Empty<uint>();
         private uint[] _vertexAttribDivisors = Array.Empty<uint>();
         private uint _vertexAttributesBound;
-        private readonly Viewport[] _viewports = new Viewport[20];
         private DrawElementsType _drawElementsType;
         private uint _ibOffset;
         private PrimitiveType _primitiveType;
@@ -872,7 +870,7 @@ namespace Veldrid.OpenGL
                         OpenGLBuffer glUB = Util.AssertSubtype<DeviceBuffer, OpenGLBuffer>(range.Buffer);
 
                         glUB.EnsureResourcesCreated();
-                        if (pipeline.GetUniformBindingForSlot(slot, element, out OpenGLUniformBinding? uniformBindingInfo))
+                        if (pipeline.GetUniformBindingForSlot(slot, element, out OpenGLUniformBinding uniformBindingInfo))
                         {
                             if (range.SizeInBytes < uniformBindingInfo.BlockSize)
                             {
@@ -908,7 +906,7 @@ namespace Veldrid.OpenGL
                         OpenGLBuffer glBuffer = Util.AssertSubtype<DeviceBuffer, OpenGLBuffer>(range.Buffer);
 
                         glBuffer.EnsureResourcesCreated();
-                        if (pipeline.GetStorageBufferBindingForSlot(slot, element, out OpenGLShaderStorageBinding? shaderStorageBinding))
+                        if (pipeline.GetStorageBufferBindingForSlot(slot, element, out OpenGLShaderStorageBinding shaderStorageBinding))
                         {
                             if (_backend == GraphicsBackend.OpenGL)
                             {
@@ -1103,8 +1101,6 @@ namespace Veldrid.OpenGL
 
         public void SetViewport(uint index, ref Viewport viewport)
         {
-            _viewports[(int)index] = viewport;
-
             if (_backend == GraphicsBackend.OpenGL)
             {
                 float left = viewport.X;
@@ -1141,20 +1137,20 @@ namespace Veldrid.OpenGL
                     (IntPtr)bufferOffsetInBytes,
                     sizeInBytes,
                     dataPtr.ToPointer());
-                CheckLastError();
             }
             else
             {
                 BufferTarget bufferTarget = BufferTarget.CopyWriteBuffer;
                 glBindBuffer(bufferTarget, glBuffer.Buffer);
                 CheckLastError();
+
                 glBufferSubData(
                     bufferTarget,
                     (IntPtr)bufferOffsetInBytes,
                     (UIntPtr)sizeInBytes,
                     dataPtr.ToPointer());
-                CheckLastError();
             }
+            CheckLastError();
         }
 
         public void UpdateTexture(

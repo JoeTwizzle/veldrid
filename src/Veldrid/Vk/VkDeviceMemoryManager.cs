@@ -10,7 +10,7 @@ using VulkanBuffer = TerraFX.Interop.Vulkan.VkBuffer;
 
 namespace Veldrid.Vulkan
 {
-    internal unsafe class VkDeviceMemoryManager : IDisposable
+    internal sealed unsafe class VkDeviceMemoryManager : IDisposable
     {
         private readonly VkDevice _device;
         private readonly VkPhysicalDevice _physicalDevice;
@@ -20,23 +20,16 @@ namespace Veldrid.Vulkan
         private readonly Dictionary<uint, ChunkAllocatorSet> _allocatorsByMemoryTypeUnmapped = new();
         private readonly Dictionary<uint, ChunkAllocatorSet> _allocatorsByMemoryType = new();
 
-        private readonly vkGetBufferMemoryRequirements2_t _getBufferMemoryRequirements2;
-        private readonly vkGetImageMemoryRequirements2_t _getImageMemoryRequirements2;
-
         public VkDeviceMemoryManager(
             VkDevice device,
             VkPhysicalDevice physicalDevice,
             ulong bufferImageGranularity,
-            ulong chunkGranularity,
-            vkGetBufferMemoryRequirements2_t getBufferMemoryRequirements2,
-            vkGetImageMemoryRequirements2_t getImageMemoryRequirements2)
+            ulong chunkGranularity)
         {
             _device = device;
             _physicalDevice = physicalDevice;
             _bufferImageGranularity = bufferImageGranularity;
             _chunkGranularity = chunkGranularity;
-            _getBufferMemoryRequirements2 = getBufferMemoryRequirements2;
-            _getImageMemoryRequirements2 = getImageMemoryRequirements2;
         }
 
         public VkMemoryBlock Allocate(
@@ -179,7 +172,7 @@ namespace Veldrid.Vulkan
             }
         }
 
-        private class ChunkAllocatorSet : IDisposable
+        private sealed class ChunkAllocatorSet : IDisposable
         {
             private readonly VkDevice _device;
             private readonly uint _memoryTypeIndex;
@@ -253,7 +246,7 @@ namespace Veldrid.Vulkan
             }
         }
 
-        private class ChunkAllocator : IDisposable
+        private sealed class ChunkAllocator : IDisposable
         {
             public const ulong PersistentMappedChunkSize = 1024 * 1024;
             public const ulong UnmappedChunkSize = 1024 * 1024 * 8;
