@@ -156,25 +156,23 @@ namespace Veldrid.Vulkan
 
         public override void TransitionToIntermediateLayout(VkCommandBuffer cb)
         {
-            ReadOnlySpan<FramebufferAttachment> colorTargets = ColorTargets;
-
-            for (int i = 0; i < colorTargets.Length; i++)
+            foreach (ref readonly FramebufferAttachment ca in ColorTargets)
             {
-                FramebufferAttachment ca = colorTargets[i];
                 VkTexture vkTex = Util.AssertSubtype<Texture, VkTexture>(ca.Target);
                 vkTex.SetImageLayout(0, ca.ArrayLayer, VkImageLayout.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
             }
         }
 
-        public override void TransitionToFinalLayout(VkCommandBuffer cb)
+        public override void TransitionToFinalLayout(VkCommandBuffer cb, bool attachment)
         {
-            ReadOnlySpan<FramebufferAttachment> colorTargets = ColorTargets;
+            VkImageLayout layout = attachment
+                ? VkImageLayout.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                : VkImageLayout.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-            for (int i = 0; i < colorTargets.Length; i++)
+            foreach (ref readonly FramebufferAttachment ca in ColorTargets)
             {
-                FramebufferAttachment ca = colorTargets[i];
                 VkTexture vkTex = Util.AssertSubtype<Texture, VkTexture>(ca.Target);
-                vkTex.TransitionImageLayout(cb, 0, 1, ca.ArrayLayer, 1, VkImageLayout.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+                vkTex.TransitionImageLayout(cb, 0, 1, ca.ArrayLayer, 1, layout);
             }
         }
 

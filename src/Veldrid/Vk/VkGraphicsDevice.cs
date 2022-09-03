@@ -103,7 +103,7 @@ namespace Veldrid.Vulkan
             IsUvOriginTopLeft = true;
             IsDepthRangeZeroToOne = true;
             IsClipSpaceYInverted = true;
-            
+
             CreateInstance(options.Debug, vkOptions);
             IsDebug = options.Debug;
 
@@ -470,6 +470,11 @@ namespace Veldrid.Vulkan
             List<IntPtr> instanceExtensions = new();
             List<IntPtr> instanceLayers = new();
 
+            if (availableInstanceExtensions.Contains(CommonStrings.VK_KHR_portability_subset))
+            {
+                _surfaceExtensions.Add(CommonStrings.VK_KHR_portability_subset);
+            }
+
             if (availableInstanceExtensions.Contains(CommonStrings.VK_KHR_SURFACE_EXTENSION_NAME))
             {
                 _surfaceExtensions.Add(CommonStrings.VK_KHR_SURFACE_EXTENSION_NAME);
@@ -625,6 +630,8 @@ namespace Veldrid.Vulkan
 
         public void EnableDebugCallback(
             VkDebugReportFlagsEXT flags =
+                VkDebugReportFlagsEXT.VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+                VkDebugReportFlagsEXT.VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
                 VkDebugReportFlagsEXT.VK_DEBUG_REPORT_WARNING_BIT_EXT |
                 VkDebugReportFlagsEXT.VK_DEBUG_REPORT_ERROR_BIT_EXT)
         {
@@ -661,9 +668,12 @@ namespace Veldrid.Vulkan
             VkDebugReportFlagsEXT debugReportFlags = flags;
 
 #if DEBUG
-            if (Debugger.IsAttached)
+            if ((flags & VkDebugReportFlagsEXT.VK_DEBUG_REPORT_ERROR_BIT_EXT) != 0)
             {
-                Debugger.Break();
+                if (Debugger.IsAttached)
+                {
+                    Debugger.Break();
+                }
             }
 #endif
 
@@ -712,8 +722,6 @@ namespace Veldrid.Vulkan
             VkPhysicalDeviceFeatures physicalDeviceFeatures;
             vkGetPhysicalDeviceFeatures(_physicalDevice, &physicalDeviceFeatures);
             _physicalDeviceFeatures = physicalDeviceFeatures;
-
-
             VkPhysicalDeviceMemoryProperties physicalDeviceMemProperties;
             vkGetPhysicalDeviceMemoryProperties(_physicalDevice, &physicalDeviceMemProperties);
             _physicalDeviceMemProperties = physicalDeviceMemProperties;
@@ -806,6 +814,10 @@ namespace Veldrid.Vulkan
                     {
                         requiredDeviceExtensions.Remove(extensionName);
                         hasDriverProperties = true;
+                    }
+                    else if (extensionName == "VK_KHR_portability_subset")
+                    {
+                        requiredDeviceExtensions.Remove(extensionName);
                     }
                     else if (requiredDeviceExtensions.Remove(extensionName))
                     {
@@ -1049,8 +1061,14 @@ namespace Veldrid.Vulkan
                     void* ret;
                     VkResult result = vkMapMemory(
                         _device, memoryBlock.DeviceMemory, memoryBlock.Offset, memoryBlock.Size, 0, &ret);
-                    CheckResult(result);
-
+                    if (result != VkResult.VK_ERROR_MEMORY_MAP_FAILED)
+                    {
+                        CheckResult(result);
+                    }
+                    else
+                    {
+                        ThrowMapFailedException(resource, subresource);
+                    }
                     mappedPtr = (IntPtr)ret;
                 }
             }
@@ -1304,29 +1322,6 @@ namespace Veldrid.Vulkan
             return sharedPool;
         }
 
-        private IntPtr MapBuffer(VkBuffer buffer, uint numBytes)
-        {
-            if (buffer.Memory.IsPersistentMapped)
-            {
-                return (IntPtr)buffer.Memory.BlockMappedPointer;
-            }
-            else
-            {
-                void* mappedPtr;
-                VkResult result = vkMapMemory(Device, buffer.Memory.DeviceMemory, buffer.Memory.Offset, numBytes, 0, &mappedPtr);
-                CheckResult(result);
-                return (IntPtr)mappedPtr;
-            }
-        }
-
-        private void UnmapBuffer(VkBuffer buffer)
-        {
-            if (!buffer.Memory.IsPersistentMapped)
-            {
-                vkUnmapMemory(Device, buffer.Memory.DeviceMemory);
-            }
-        }
-
         private protected override void UpdateTextureCore(
             Texture texture,
             IntPtr source,
@@ -1507,11 +1502,7 @@ namespace Veldrid.Vulkan
 
         internal void ClearColorTexture(VkTexture texture, VkClearColorValue color)
         {
-            uint effectiveLayers = texture.ArrayLayers;
-            if ((texture.Usage & TextureUsage.Cubemap) != 0)
-            {
-                effectiveLayers *= 6;
-            }
+            uint effectiveLayers = texture.ActualArrayLayers;
 
             VkImageSubresourceRange range = new()
             {
@@ -1535,11 +1526,7 @@ namespace Veldrid.Vulkan
 
         internal void ClearDepthTexture(VkTexture texture, VkClearDepthStencilValue clearValue)
         {
-            uint effectiveLayers = texture.ArrayLayers;
-            if ((texture.Usage & TextureUsage.Cubemap) != 0)
-            {
-                effectiveLayers *= 6;
-            }
+            uint effectiveLayers = texture.ActualArrayLayers;
 
             VkImageAspectFlags aspect = FormatHelpers.IsStencilFormat(texture.Format)
                 ? VkImageAspectFlags.VK_IMAGE_ASPECT_DEPTH_BIT | VkImageAspectFlags.VK_IMAGE_ASPECT_STENCIL_BIT
@@ -1572,7 +1559,7 @@ namespace Veldrid.Vulkan
         {
             SharedCommandPool pool = GetFreeCommandPool();
             VkCommandBuffer cb = pool.BeginNewCommandBuffer();
-            texture.TransitionImageLayout(cb, 0, texture.MipLevels, 0, texture.ArrayLayers, layout);
+            texture.TransitionImageLayout(cb, 0, texture.MipLevels, 0, texture.ActualArrayLayers, layout);
             pool.EndAndSubmit(cb);
         }
 

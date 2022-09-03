@@ -15,6 +15,7 @@ namespace Veldrid.Vulkan
         private readonly uint _actualImageArrayLayers;
         private bool _destroyed;
 
+        public uint ActualArrayLayers => _actualImageArrayLayers;
         public override bool IsDisposed => _destroyed;
 
         public VkImage OptimalDeviceImage => _optimalImage;
@@ -39,7 +40,7 @@ namespace Veldrid.Vulkan
             Depth = description.Depth;
             MipLevels = description.MipLevels;
             ArrayLayers = description.ArrayLayers;
-            bool isCubemap = ((description.Usage) & TextureUsage.Cubemap) == TextureUsage.Cubemap;
+            bool isCubemap = (description.Usage & TextureUsage.Cubemap) == TextureUsage.Cubemap;
             _actualImageArrayLayers = isCubemap
                 ? 6 * ArrayLayers
                 : ArrayLayers;
@@ -128,10 +129,7 @@ namespace Veldrid.Vulkan
                 CheckResult(result);
 
                 _imageLayouts = new VkImageLayout[subresourceCount];
-                for (int i = 0; i < _imageLayouts.Length; i++)
-                {
-                    _imageLayouts[i] = VkImageLayout.VK_IMAGE_LAYOUT_PREINITIALIZED;
-                }
+                _imageLayouts.AsSpan().Fill(VkImageLayout.VK_IMAGE_LAYOUT_PREINITIALIZED);
             }
             else // isStaging
             {
@@ -246,6 +244,10 @@ namespace Veldrid.Vulkan
             VkFormat = vkFormat;
             Format = VkFormats.VkToVdPixelFormat(VkFormat);
             ArrayLayers = arrayLayers;
+            bool isCubemap = (usage & TextureUsage.Cubemap) == TextureUsage.Cubemap;
+            _actualImageArrayLayers = isCubemap
+                ? 6 * ArrayLayers
+                : ArrayLayers;
             Usage = usage;
             Type = TextureType.Texture2D;
             SampleCount = sampleCount;
@@ -337,13 +339,13 @@ namespace Veldrid.Vulkan
                 return;
             }
 
-            VkImageLayout oldLayout = _imageLayouts[CalculateSubresource(baseMipLevel, baseArrayLayer)];
+            VkImageLayout oldLayout = GetImageLayout(baseMipLevel, baseArrayLayer);
 #if DEBUG
             for (uint level = 0; level < levelCount; level++)
             {
                 for (uint layer = 0; layer < layerCount; layer++)
                 {
-                    if (_imageLayouts[CalculateSubresource(baseMipLevel + level, baseArrayLayer + layer)] != oldLayout)
+                    if (GetImageLayout(baseMipLevel + level, baseArrayLayer + layer) != oldLayout)
                     {
                         throw new VeldridException("Unexpected image layout.");
                     }
@@ -371,14 +373,14 @@ namespace Veldrid.Vulkan
                     baseArrayLayer,
                     layerCount,
                     aspectMask,
-                    _imageLayouts[CalculateSubresource(baseMipLevel, baseArrayLayer)],
+                    GetImageLayout(baseMipLevel, baseArrayLayer),
                     newLayout);
 
                 for (uint level = 0; level < levelCount; level++)
                 {
                     for (uint layer = 0; layer < layerCount; layer++)
                     {
-                        _imageLayouts[CalculateSubresource(baseMipLevel + level, baseArrayLayer + layer)] = newLayout;
+                        SetImageLayout(baseMipLevel + level, baseArrayLayer + layer, newLayout);
                     }
                 }
             }
@@ -401,9 +403,7 @@ namespace Veldrid.Vulkan
             {
                 for (uint layer = baseArrayLayer; layer < baseArrayLayer + layerCount; layer++)
                 {
-                    uint subresource = CalculateSubresource(level, layer);
-                    VkImageLayout oldLayout = _imageLayouts[subresource];
-
+                    VkImageLayout oldLayout = GetImageLayout(level, layer);
                     if (oldLayout != newLayout)
                     {
                         VkImageAspectFlags aspectMask;
@@ -429,7 +429,7 @@ namespace Veldrid.Vulkan
                             oldLayout,
                             newLayout);
 
-                        _imageLayouts[subresource] = newLayout;
+                        SetImageLayout(level, layer, newLayout);
                     }
                 }
             }

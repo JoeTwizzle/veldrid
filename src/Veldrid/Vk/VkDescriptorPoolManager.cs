@@ -164,9 +164,11 @@ namespace Veldrid.Vulkan
             public uint RemainingSets;
 
             public uint UniformBufferCount;
+            public uint UniformBufferDynamicCount;
             public uint SampledImageCount;
             public uint SamplerCount;
             public uint StorageBufferCount;
+            public uint StorageBufferDynamicCount;
             public uint StorageImageCount;
 
             public PoolInfo(VkDescriptorPool pool, uint totalSets, uint descriptorCount)
@@ -174,9 +176,11 @@ namespace Veldrid.Vulkan
                 Pool = pool;
                 RemainingSets = totalSets;
                 UniformBufferCount = descriptorCount;
+                UniformBufferDynamicCount = descriptorCount;
                 SampledImageCount = descriptorCount;
                 SamplerCount = descriptorCount;
                 StorageBufferCount = descriptorCount;
+                StorageBufferDynamicCount = descriptorCount;
                 StorageImageCount = descriptorCount;
             }
 
@@ -195,16 +199,20 @@ namespace Veldrid.Vulkan
             {
                 if (RemainingSets > 0
                     && UniformBufferCount >= counts.UniformBufferCount
+                    && UniformBufferDynamicCount >= counts.UniformBufferDynamicCount
                     && SampledImageCount >= counts.SampledImageCount
                     && SamplerCount >= counts.SamplerCount
                     && StorageBufferCount >= counts.SamplerCount
+                    && StorageBufferDynamicCount >= counts.StorageBufferDynamicCount
                     && StorageImageCount >= counts.StorageImageCount)
                 {
                     RemainingSets -= 1;
                     UniformBufferCount -= counts.UniformBufferCount;
+                    UniformBufferDynamicCount -= counts.UniformBufferDynamicCount;
                     SampledImageCount -= counts.SampledImageCount;
                     SamplerCount -= counts.SamplerCount;
                     StorageBufferCount -= counts.StorageBufferCount;
+                    StorageBufferDynamicCount -= counts.StorageBufferDynamicCount;
                     StorageImageCount -= counts.StorageImageCount;
                     return true;
                 }
@@ -222,9 +230,11 @@ namespace Veldrid.Vulkan
                 RemainingSets += 1;
 
                 UniformBufferCount += counts.UniformBufferCount;
+                UniformBufferDynamicCount += counts.UniformBufferDynamicCount;
                 SampledImageCount += counts.SampledImageCount;
                 SamplerCount += counts.SamplerCount;
                 StorageBufferCount += counts.StorageBufferCount;
+                StorageBufferDynamicCount += counts.StorageBufferDynamicCount;
                 StorageImageCount += counts.StorageImageCount;
             }
         }

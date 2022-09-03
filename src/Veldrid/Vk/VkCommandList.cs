@@ -472,7 +472,7 @@ namespace Veldrid.Vulkan
             for (int i = 0; i < sampledTextures.Count; i++)
             {
                 VkTexture tex = sampledTextures[i];
-                tex.TransitionImageLayout(_cb, 0, tex.MipLevels, 0, tex.ArrayLayers, layout);
+                tex.TransitionImageLayout(_cb, 0, tex.MipLevels, 0, tex.ActualArrayLayers, layout);
             }
         }
 
@@ -545,7 +545,7 @@ namespace Veldrid.Vulkan
 
             vkSource.TransitionImageLayout(_cb, 0, 1, 0, 1, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
             vkDestination.TransitionImageLayout(_cb, 0, 1, 0, 1, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
+             
             vkCmdResolveImage(
                 _cb,
                 vkSource.OptimalDeviceImage,
@@ -555,10 +555,8 @@ namespace Veldrid.Vulkan
                 1,
                 &region);
 
-            if ((vkDestination.Usage & TextureUsage.Sampled) != 0)
-            {
-                vkDestination.TransitionImageLayout(_cb, 0, 1, 0, 1, VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            }
+            TransitionBackFromTransfer(_cb, vkSource, 0, 1, 0, 1);
+            TransitionBackFromTransfer(_cb, vkDestination, 0, 1, 0, 1);
         }
 
         public override void End()
@@ -578,7 +576,7 @@ namespace Veldrid.Vulkan
             if (_activeRenderPass != VkRenderPass.NULL)
             {
                 EndCurrentRenderPass();
-                _currentFramebuffer!.TransitionToFinalLayout(_cb);
+                _currentFramebuffer!.TransitionToFinalLayout(_cb, false);
             }
 
             VkResult result = vkEndCommandBuffer(_cb);
@@ -600,7 +598,7 @@ namespace Veldrid.Vulkan
 
             if (_currentFramebuffer != null)
             {
-                _currentFramebuffer.TransitionToFinalLayout(_cb);
+                _currentFramebuffer.TransitionToFinalLayout(_cb, false);
             }
 
             VkFramebufferBase vkFB = Util.AssertSubtype<Framebuffer, VkFramebufferBase>(fb);
@@ -708,13 +706,15 @@ namespace Veldrid.Vulkan
                                 vkClearValue.color.float32[1],
                                 vkClearValue.color.float32[2],
                                 vkClearValue.color.float32[3]);
-                            ClearColorTarget(i, clearColor);
+                            ClearColorTargetCore(i, clearColor);
                         }
                     }
                 }
             }
             else
             {
+                _currentFramebuffer.TransitionToFinalLayout(_cb, true);
+
                 // We have clear values for every attachment.
                 renderPassBI.renderPass = _currentFramebuffer.RenderPassClear;
                 fixed (VkClearValue* clearValuesPtr = _clearValues)
@@ -723,11 +723,11 @@ namespace Veldrid.Vulkan
                     renderPassBI.pClearValues = clearValuesPtr;
                     if (_depthClearValue.HasValue)
                     {
-                        _clearValues[colorTargetCount] = _depthClearValue.Value;
+                        _clearValues[colorTargetCount] = _depthClearValue.GetValueOrDefault();
                         _depthClearValue = null;
                     }
                     vkCmdBeginRenderPass(_cb, &renderPassBI, VkSubpassContents.VK_SUBPASS_CONTENTS_INLINE);
-                    _activeRenderPass = _currentFramebuffer.RenderPassClear;
+                    _activeRenderPass = renderPassBI.renderPass;
                     Util.ClearArray(_validColorClearValues);
                 }
             }
@@ -904,7 +904,51 @@ namespace Veldrid.Vulkan
 
             fixed (BufferCopyCommand* commandPtr = commands)
             {
-                vkCmdCopyBuffer(_cb, srcVkBuffer.DeviceBuffer, dstVkBuffer.DeviceBuffer, (uint)commands.Length, (VkBufferCopy*)commandPtr);
+                int offset = 0;
+                int prevOffset = 0;
+
+                while (offset < commands.Length)
+                {
+                    if (commands[offset].Length != 0)
+                    {
+                        offset++;
+                        continue;
+                    }
+
+                    int count = offset - prevOffset;
+                    if (count > 0)
+                    {
+                        vkCmdCopyBuffer(
+                            _cb,
+                            srcVkBuffer.DeviceBuffer,
+                            dstVkBuffer.DeviceBuffer,
+                            (uint)count,
+                            (VkBufferCopy*)(commandPtr + prevOffset));
+                    }
+
+                    while (offset < commands.Length)
+                    {
+                        if (commands[offset].Length != 0)
+                        {
+                            break;
+                        }
+                        offset++;
+                    }
+                    prevOffset = offset;
+                }
+
+                {
+                    int count = offset - prevOffset;
+                    if (count > 0)
+                    {
+                        vkCmdCopyBuffer(
+                            _cb,
+                            srcVkBuffer.DeviceBuffer,
+                            dstVkBuffer.DeviceBuffer,
+                            (uint)count,
+                            (VkBufferCopy*)(commandPtr + prevOffset));
+                    }
+                }
             }
 
             VkMemoryBarrier barrier = new()
@@ -947,6 +991,43 @@ namespace Veldrid.Vulkan
             _currentStagingInfo.AddResource(srcVkTexture.RefCount);
             VkTexture dstVkTexture = Util.AssertSubtype<Texture, VkTexture>(destination);
             _currentStagingInfo.AddResource(dstVkTexture.RefCount);
+        }
+
+        internal static VkImageLayout GetTransitionBackLayout(TextureUsage usage)
+        {
+            if ((usage & TextureUsage.Sampled) != 0)
+            {
+                return VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+            else if ((usage & TextureUsage.RenderTarget) != 0)
+            {
+                return (usage & TextureUsage.DepthStencil) != 0
+                    ? VkImageLayout.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                    : VkImageLayout.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            }
+            else
+            {
+                return VkImageLayout.VK_IMAGE_LAYOUT_GENERAL;
+            }
+        }
+
+        internal static void TransitionBackFromTransfer(
+            VkCommandBuffer cb,
+            VkTexture texture,
+            uint baseMipLevel,
+            uint levelCount,
+            uint baseArrayLayer,
+            uint layerCount)
+        {
+            VkImageLayout layout = GetTransitionBackLayout(texture.Usage);
+
+            texture.TransitionImageLayout(
+                cb,
+                baseMipLevel,
+                levelCount,
+                baseArrayLayer,
+                layerCount,
+                layout);
         }
 
         internal static void CopyTextureCore_VkCommandBuffer(
@@ -1020,27 +1101,9 @@ namespace Veldrid.Vulkan
                     1,
                     &region);
 
-                if ((srcVkTexture.Usage & TextureUsage.Sampled) != 0)
-                {
-                    srcVkTexture.TransitionImageLayout(
-                        cb,
-                        srcMipLevel,
-                        1,
-                        srcBaseArrayLayer,
-                        layerCount,
-                        VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                }
+                TransitionBackFromTransfer(cb, srcVkTexture, srcMipLevel, 1, srcBaseArrayLayer, layerCount);
 
-                if ((dstVkTexture.Usage & TextureUsage.Sampled) != 0)
-                {
-                    dstVkTexture.TransitionImageLayout(
-                        cb,
-                        dstMipLevel,
-                        1,
-                        dstBaseArrayLayer,
-                        layerCount,
-                        VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                }
+                TransitionBackFromTransfer(cb, dstVkTexture, dstMipLevel, 1, dstBaseArrayLayer, layerCount);
             }
             else if (sourceIsStaging && !destIsStaging)
             {
@@ -1070,7 +1133,7 @@ namespace Veldrid.Vulkan
                 uint compressedX = srcX / blockSize;
                 uint compressedY = srcY / blockSize;
                 uint blockSizeInBytes = blockSize == 1
-                    ? FormatHelpers.GetSizeInBytes(srcVkTexture.Format)
+                    ? FormatSizeHelpers.GetSizeInBytes(srcVkTexture.Format)
                     : FormatHelpers.GetBlockSizeInBytes(srcVkTexture.Format);
                 uint rowPitch = FormatHelpers.GetRowPitch(bufferRowLength, srcVkTexture.Format);
                 uint depthPitch = FormatHelpers.GetDepthPitch(rowPitch, bufferImageHeight, srcVkTexture.Format);
@@ -1093,16 +1156,7 @@ namespace Veldrid.Vulkan
 
                 vkCmdCopyBufferToImage(cb, srcBuffer, dstImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &regions);
 
-                if ((dstVkTexture.Usage & TextureUsage.Sampled) != 0)
-                {
-                    dstVkTexture.TransitionImageLayout(
-                        cb,
-                        dstMipLevel,
-                        1,
-                        dstBaseArrayLayer,
-                        layerCount,
-                        VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                }
+                TransitionBackFromTransfer(cb, dstVkTexture, dstMipLevel, 1, dstBaseArrayLayer, layerCount);
             }
             else if (!sourceIsStaging && destIsStaging)
             {
@@ -1116,18 +1170,10 @@ namespace Veldrid.Vulkan
                     VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
                 VulkanBuffer dstBuffer = dstVkTexture.StagingBuffer;
-                VkSubresourceLayout dstLayout = dstVkTexture.GetSubresourceLayout(dstMipLevel, dstBaseArrayLayer);
 
                 VkImageAspectFlags aspect = (srcVkTexture.Usage & TextureUsage.DepthStencil) != 0
                     ? VkImageAspectFlags.VK_IMAGE_ASPECT_DEPTH_BIT
                     : VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT;
-                VkImageSubresourceLayers srcSubresource = new()
-                {
-                    aspectMask = aspect,
-                    layerCount = layerCount,
-                    mipLevel = srcMipLevel,
-                    baseArrayLayer = srcBaseArrayLayer
-                };
 
                 Util.GetMipDimensions(dstVkTexture, dstMipLevel, out uint mipWidth, out uint mipHeight);
                 uint blockSize = FormatHelpers.IsCompressedFormat(srcVkTexture.Format) ? 4u : 1u;
@@ -1136,36 +1182,43 @@ namespace Veldrid.Vulkan
                 uint compressedDstX = dstX / blockSize;
                 uint compressedDstY = dstY / blockSize;
                 uint blockSizeInBytes = blockSize == 1
-                    ? FormatHelpers.GetSizeInBytes(dstVkTexture.Format)
+                    ? FormatSizeHelpers.GetSizeInBytes(dstVkTexture.Format)
                     : FormatHelpers.GetBlockSizeInBytes(dstVkTexture.Format);
                 uint rowPitch = FormatHelpers.GetRowPitch(bufferRowLength, dstVkTexture.Format);
                 uint depthPitch = FormatHelpers.GetDepthPitch(rowPitch, bufferImageHeight, dstVkTexture.Format);
 
-                VkBufferImageCopy region = new()
+                VkBufferImageCopy* layers = stackalloc VkBufferImageCopy[(int)layerCount];
+                for (uint layer = 0; layer < layerCount; layer++)
                 {
-                    bufferRowLength = mipWidth,
-                    bufferImageHeight = mipHeight,
-                    bufferOffset = dstLayout.offset
-                        + (dstZ * depthPitch)
-                        + (compressedDstY * rowPitch)
-                        + (compressedDstX * blockSizeInBytes),
-                    imageExtent = new VkExtent3D() { width = width, height = height, depth = depth },
-                    imageOffset = new VkOffset3D() { x = (int)srcX, y = (int)srcY, z = (int)srcZ },
-                    imageSubresource = srcSubresource
-                };
+                    VkSubresourceLayout dstLayout = dstVkTexture.GetSubresourceLayout(dstMipLevel, dstBaseArrayLayer + layer);
 
-                vkCmdCopyImageToBuffer(cb, srcImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstBuffer, 1, &region);
+                    VkImageSubresourceLayers srcSubresource = new()
+                    {
+                        aspectMask = aspect,
+                        layerCount = 1,
+                        mipLevel = srcMipLevel,
+                        baseArrayLayer = srcBaseArrayLayer + layer
+                    };
 
-                if ((srcVkTexture.Usage & TextureUsage.Sampled) != 0)
-                {
-                    srcVkTexture.TransitionImageLayout(
-                        cb,
-                        srcMipLevel,
-                        1,
-                        srcBaseArrayLayer,
-                        layerCount,
-                        VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                    VkBufferImageCopy region = new()
+                    {
+                        bufferRowLength = bufferRowLength,
+                        bufferImageHeight = bufferImageHeight,
+                        bufferOffset = dstLayout.offset
+                            + (dstZ * depthPitch)
+                            + (compressedDstY * rowPitch)
+                            + (compressedDstX * blockSizeInBytes),
+                        imageExtent = new VkExtent3D { width = width, height = height, depth = depth },
+                        imageOffset = new VkOffset3D { x = (int)srcX, y = (int)srcY, z = (int)srcZ },
+                        imageSubresource = srcSubresource
+                    };
+
+                    layers[layer] = region;
                 }
+
+                vkCmdCopyImageToBuffer(cb, srcImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstBuffer, layerCount, layers);
+
+                TransitionBackFromTransfer(cb, srcVkTexture, srcMipLevel, 1, srcBaseArrayLayer, layerCount);
             }
             else
             {
@@ -1180,7 +1233,7 @@ namespace Veldrid.Vulkan
                 {
                     // TODO: batch BufferCopy
 
-                    uint pixelSize = FormatHelpers.GetSizeInBytes(srcVkTexture.Format);
+                    uint pixelSize = FormatSizeHelpers.GetSizeInBytes(srcVkTexture.Format);
                     for (uint zz = 0; zz < zLimit; zz++)
                     {
                         for (uint yy = 0; yy < height; yy++)
@@ -1242,11 +1295,7 @@ namespace Veldrid.Vulkan
             VkTexture vkTex = Util.AssertSubtype<Texture, VkTexture>(texture);
             _currentStagingInfo.AddResource(vkTex.RefCount);
 
-            uint layerCount = vkTex.ArrayLayers;
-            if ((vkTex.Usage & TextureUsage.Cubemap) != 0)
-            {
-                layerCount *= 6;
-            }
+            uint layerCount = vkTex.ActualArrayLayers;
 
             VkImageBlit region;
 
@@ -1295,10 +1344,8 @@ namespace Veldrid.Vulkan
                 depth = mipDepth;
             }
 
-            if ((vkTex.Usage & TextureUsage.Sampled) != 0)
-            {
-                vkTex.TransitionImageLayoutNonmatching(_cb, 0, vkTex.MipLevels, 0, layerCount, VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            }
+            VkImageLayout layout = GetTransitionBackLayout(vkTex.Usage);
+            vkTex.TransitionImageLayoutNonmatching(_cb, 0, vkTex.MipLevels, 0, layerCount, layout);
         }
 
         [Conditional("DEBUG")]

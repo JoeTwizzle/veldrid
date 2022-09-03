@@ -15,7 +15,7 @@ namespace Veldrid
     {
         private readonly object _deferredDisposalLock = new();
         private readonly List<IDisposable> _disposables = new();
-        private Sampler _aniso4xSampler = null!;
+        private Sampler? _aniso4xSampler;
         private bool _disposed;
 
         internal GraphicsDevice()
@@ -955,6 +955,30 @@ namespace Veldrid
             }
         }
 
+        [DoesNotReturn]
+        protected static void ThrowMappedException(MappableResource resource, uint subresource)
+        {
+            throw new VeldridMappedResourceException($"The resource ({resource}@{subresource}) is mapped.");
+        }
+
+        [DoesNotReturn]
+        protected static void ThrowNotMappedException(MappableResource resource, uint subresource)
+        {
+            throw new VeldridMappedResourceException($"The resource ({resource}@{subresource}) is not mapped.");
+        }
+
+        [DoesNotReturn]
+        protected static void ThrowCorruptMapException(MappableResource resource, uint subresource)
+        {
+            throw new VeldridMappedResourceException($"The mapped resource ({resource}@{subresource}) is corrupted.");
+        }
+
+        [DoesNotReturn]
+        protected static void ThrowMapFailedException(MappableResource resource, uint subresource)
+        {
+            throw new VeldridMappedResourceException($"Failed to map the resource ({resource}@{subresource}).");
+        }
+
         /// <summary>
         /// Gets a simple point-filtered <see cref="Sampler"/> object owned by this instance.
         /// This object is created with <see cref="SamplerDescription.Point"/>.
@@ -991,6 +1015,9 @@ namespace Veldrid
         /// <summary>
         /// Performs API-specific disposal of resources controlled by this device.
         /// </summary>
+        /// <remarks>
+        /// All created child resources must be disposed prior to calling this method.
+        /// </remarks>
         protected virtual void Dispose(bool disposing)
         {
             if (!_disposed)
@@ -1000,7 +1027,7 @@ namespace Veldrid
                     WaitForIdle();
                     PointSampler.Dispose();
                     LinearSampler.Dispose();
-                    Aniso4xSampler.Dispose();
+                    _aniso4xSampler?.Dispose();
                 }
 
                 _disposed = true;

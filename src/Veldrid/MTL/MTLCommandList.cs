@@ -385,6 +385,11 @@ namespace Veldrid.MTL
 
                 foreach (ref readonly BufferCopyCommand command in commands)
                 {
+                    if (command.Length == 0)
+                    {
+                        continue;
+                    }
+
                     _bce.copy(
                         mtlSrc.DeviceBuffer, (UIntPtr)command.ReadOffset,
                         mtlDst.DeviceBuffer, (UIntPtr)command.WriteOffset,
@@ -403,6 +408,11 @@ namespace Veldrid.MTL
 
             foreach (ref readonly BufferCopyCommand command in commands)
             {
+                if (command.Length == 0)
+                {
+                    continue;
+                }
+
                 MTLUnalignedBufferCopyInfo copyInfo;
                 copyInfo.SourceOffset = (uint)command.ReadOffset;
                 copyInfo.DestinationOffset = (uint)command.WriteOffset;
@@ -437,7 +447,7 @@ namespace Veldrid.MTL
                     uint compressedSrcX = srcX / blockSize;
                     uint compressedSrcY = srcY / blockSize;
                     uint blockSizeInBytes = blockSize == 1
-                        ? FormatHelpers.GetSizeInBytes(srcMTLTexture.Format)
+                        ? FormatSizeHelpers.GetSizeInBytes(srcMTLTexture.Format)
                         : FormatHelpers.GetBlockSizeInBytes(srcMTLTexture.Format);
 
                     ulong srcSubresourceBase = Util.ComputeSubresourceOffset(
@@ -507,7 +517,7 @@ namespace Veldrid.MTL
                     uint blockSize = FormatHelpers.IsCompressedFormat(dstMTLTexture.Format) ? 4u : 1u;
                     if (blockSize == 1)
                     {
-                        uint pixelSize = FormatHelpers.GetSizeInBytes(dstMTLTexture.Format);
+                        uint pixelSize = FormatSizeHelpers.GetSizeInBytes(dstMTLTexture.Format);
                         uint copySize = width * pixelSize;
                         for (uint zz = 0; zz < depth; zz++)
                             for (uint yy = 0; yy < height; yy++)
@@ -582,7 +592,7 @@ namespace Veldrid.MTL
                     uint compressedDstX = dstX / blockSize;
                     uint compressedDstY = dstY / blockSize;
                     uint blockSizeInBytes = blockSize == 1
-                        ? FormatHelpers.GetSizeInBytes(srcMTLTexture.Format)
+                        ? FormatSizeHelpers.GetSizeInBytes(srcMTLTexture.Format)
                         : FormatHelpers.GetBlockSizeInBytes(srcMTLTexture.Format);
                     uint rowPitch = FormatHelpers.GetRowPitch(bufferRowLength, srcMTLTexture.Format);
                     uint depthPitch = FormatHelpers.GetDepthPitch(rowPitch, bufferImageHeight, srcMTLTexture.Format);

@@ -33,11 +33,6 @@ namespace Veldrid.ImageSharp
         public PixelFormat Format { get; }
 
         /// <summary>
-        /// The size of each pixel, in bytes.
-        /// </summary>
-        public uint PixelSizeInBytes => sizeof(byte) * 4;
-
-        /// <summary>
         /// The number of levels in the mipmap chain. This is equal to the length of the Images array.
         /// </summary>
         public uint MipLevels => (uint)Images.Length;
@@ -123,77 +118,19 @@ namespace Veldrid.ImageSharp
         {
             Texture tex = factory.CreateTexture(TextureDescription.Texture2D(
                 Width, Height, MipLevels, 1, Format, TextureUsage.Sampled));
+
             for (int level = 0; level < MipLevels; level++)
             {
                 Image<Rgba32> image = Images[level];
-                if (!image.DangerousTryGetSinglePixelMemory(out Memory<Rgba32> pixels))
-                {
-                    var group = image.GetPixelMemoryGroup();
-                    int startY = 0;
-                    
-                    int remainder = 0;
-                    foreach (var memory in group)
-                    {
-                        fixed (void* pixelPtr = memory.Span)
-                        {
-                            if (remainder != 0)
-                            {
-                                gd.UpdateTexture(
-                                    tex,
-                                    (IntPtr)pixelPtr,
-                                    (uint)(PixelSizeInBytes * memory.Span.Length),
-                                    (uint)0,
-                                    (uint)startY,
-                                    0,
-                                    (uint)remainder,
-                                    1,
-                                    1,
-                                    (uint)level,
-                                    0);
-                                startY++;
-                            }
-                            int excess = memory.Length % ((int)PixelSizeInBytes * image.Width);
-                            int lineCount = memory.Length / ((int)PixelSizeInBytes * image.Width);
-                            gd.UpdateTexture(
-                                    tex,
-                                    (IntPtr)pixelPtr,
-                                    (uint)(PixelSizeInBytes * memory.Span.Length),
-                                    0,
-                                    (uint)startY,
-                                    0,
-                                    (uint)image.Width,
-                                    (uint)(startY + lineCount),
-                                    1,
-                                    (uint)level,
-                                    0);
-                            if (excess != 0)
-                            {
-                                gd.UpdateTexture(
-                                    tex,
-                                    (IntPtr)pixelPtr,
-                                    (uint)(PixelSizeInBytes * memory.Span.Length),
-                                    (uint)0,
-                                    (uint)(startY + lineCount),
-                                    0,
-                                    (uint)excess,
-                                    1,
-                                    1,
-                                    (uint)level,
-                                    0);
-                            }
-                            remainder = (image.Width - excess) % image.Width;
-                            startY += lineCount;
-                        }
-                    }
-                }
-                else
+
+                if (image.DangerousTryGetSinglePixelMemory(out Memory<Rgba32> pixels))
                 {
                     fixed (void* pixelPtr = pixels.Span)
                     {
                         gd.UpdateTexture(
                             tex,
                             (IntPtr)pixelPtr,
-                            (uint)(PixelSizeInBytes * image.Width * image.Height),
+                            (uint)(sizeof(Rgba32) * image.Width * image.Height),
                             0,
                             0,
                             0,
@@ -203,6 +140,32 @@ namespace Veldrid.ImageSharp
                             (uint)level,
                             0);
                     }
+                }
+                else
+                {
+                    image.ProcessPixelRows((pixels) =>
+                    {
+                        for (int y = 0; y < pixels.Height; y++)
+                        {
+                            Span<Rgba32> span = pixels.GetRowSpan(y);
+
+                            fixed (void* pixelPtr = span)
+                            {
+                                gd.UpdateTexture(
+                                    tex,
+                                    (IntPtr)pixelPtr,
+                                    (uint)(sizeof(Rgba32) * image.Width),
+                                    0,
+                                    (uint)y,
+                                    0,
+                                    (uint)pixels.Width,
+                                    height: 1,
+                                    depth: 1,
+                                    (uint)level,
+                                    0);
+                            }
+                        }
+                    });
                 }
             }
             return tex;

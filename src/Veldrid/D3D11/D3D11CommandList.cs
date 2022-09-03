@@ -385,24 +385,24 @@ namespace Veldrid.D3D11
                 switch (rbi.Kind)
                 {
                     case ResourceKind.UniformBuffer:
-                        {
-                            D3D11BufferRange range = GetBufferRange(resource, bufferOffset);
-                            BindUniformBuffer(range, cbBase + rbi.Slot, rbi.Stages);
-                            break;
-                        }
+                    {
+                        D3D11BufferRange range = GetBufferRange(resource, bufferOffset);
+                        BindUniformBuffer(range, cbBase + rbi.Slot, rbi.Stages);
+                        break;
+                    }
                     case ResourceKind.StructuredBufferReadOnly:
-                        {
-                            D3D11BufferRange range = GetBufferRange(resource, bufferOffset);
-                            BindStorageBufferView(range, textureBase + rbi.Slot, rbi.Stages);
-                            break;
-                        }
+                    {
+                        D3D11BufferRange range = GetBufferRange(resource, bufferOffset);
+                        BindStorageBufferView(range, textureBase + rbi.Slot, rbi.Stages);
+                        break;
+                    }
                     case ResourceKind.StructuredBufferReadWrite:
-                        {
-                            D3D11BufferRange range = GetBufferRange(resource, bufferOffset);
-                            ID3D11UnorderedAccessView uav = range.Buffer.GetUnorderedAccessView(range.Offset, range.Size);
-                            BindUnorderedAccessView(null, range.Buffer, uav, uaBase + rbi.Slot, rbi.Stages, slot);
-                            break;
-                        }
+                    {
+                        D3D11BufferRange range = GetBufferRange(resource, bufferOffset);
+                        ID3D11UnorderedAccessView uav = range.Buffer.GetUnorderedAccessView(range.Offset, range.Size);
+                        BindUnorderedAccessView(null, range.Buffer, uav, uaBase + rbi.Slot, rbi.Stages, slot);
+                        break;
+                    }
                     case ResourceKind.TextureReadOnly:
                         TextureView texView = Util.GetTextureView(_gd, resource);
                         D3D11TextureView d3d11TexView = Util.AssertSubtype<TextureView, D3D11TextureView>(texView);
@@ -1111,6 +1111,10 @@ namespace Veldrid.D3D11
                     _context.PSSetSampler(slot, sampler.DeviceSampler);
                 }
             }
+            if ((stages & ShaderStages.Compute) == ShaderStages.Compute)
+            {
+                _context.CSSetSampler(slot, sampler.DeviceSampler);
+            }
         }
 
         protected override void SetFramebufferCore(Framebuffer fb)
@@ -1244,6 +1248,11 @@ namespace Veldrid.D3D11
 
             foreach (ref readonly BufferCopyCommand command in commands)
             {
+                if (command.Length == 0)
+                {
+                    continue;
+                }
+
                 Box region = new((int)command.ReadOffset, 0, 0, (int)(command.ReadOffset + command.Length), 1, 1);
 
                 _context.CopySubresourceRegion(dstD3D11Buffer.Buffer, 0, (int)command.WriteOffset, 0, 0, srcD3D11Buffer.Buffer, 0, region);
