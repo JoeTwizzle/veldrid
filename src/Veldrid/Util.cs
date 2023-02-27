@@ -30,11 +30,7 @@ namespace Veldrid
 
         internal static void EnsureArrayMinimumSize<T>(ref T[] array, uint size)
         {
-            if (array == null)
-            {
-                array = new T[size];
-            }
-            else if (array.Length < size)
+            if (array == null || array.Length < size)
             {
                 Array.Resize(ref array, (int)size);
             }
@@ -62,48 +58,12 @@ namespace Veldrid
 
         internal static bool ArrayEquals<T>(T[]? left, T[]? right) where T : class
         {
-            if (left == null || right == null)
-            {
-                return left == right;
-            }
-
-            if (left.Length != right.Length)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < left.Length; i++)
-            {
-                if (!ReferenceEquals(left[i], right[i]))
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return left.AsSpan().SequenceEqual(right.AsSpan());
         }
 
         internal static bool ArrayEqualsEquatable<T>(T[]? left, T[]? right) where T : struct, IEquatable<T>
         {
-            if (left == null || right == null)
-            {
-                return left == right;
-            }
-
-            if (left.Length != right.Length)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < left.Length; i++)
-            {
-                if (!left[i].Equals(right[i]))
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return left.AsSpan().SequenceEqual(right.AsSpan());
         }
 
         internal static void ClearArray<T>(T[] array)
@@ -253,8 +213,12 @@ namespace Veldrid
             }
         }
 
-        internal static T[] ShallowClone<T>(T[] array)
+        internal static T[] ShallowClone<T>(T[]? array)
         {
+            if (array == null)
+            {
+                return Array.Empty<T>();
+            }
             return (T[])array.Clone();
         }
 

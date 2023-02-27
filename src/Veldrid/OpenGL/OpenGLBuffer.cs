@@ -17,9 +17,6 @@ namespace Veldrid.OpenGL
 
         public override string? Name { get => _name; set { _name = value; _nameChanged = true; } }
 
-        public override uint SizeInBytes { get; }
-        public override BufferUsage Usage { get; }
-
         public uint Buffer => _buffer;
 
         public bool Created { get; private set; }
@@ -27,15 +24,13 @@ namespace Veldrid.OpenGL
 
         public override bool IsDisposed => _disposeRequested;
 
-        public OpenGLBuffer(OpenGLGraphicsDevice gd, uint sizeInBytes, BufferUsage usage, IntPtr initialData)
+        public OpenGLBuffer(OpenGLGraphicsDevice gd, in BufferDescription desc) : base(desc)
         {
             _gd = gd;
-            SizeInBytes = sizeInBytes;
-            Usage = usage;
 
-            if (initialData != IntPtr.Zero)
+            if (desc.InitialData != IntPtr.Zero)
             {
-                gd.CreateBuffer(this, initialData);
+                gd.CreateBuffer(this, desc.InitialData);
             }
         }
 
@@ -45,13 +40,20 @@ namespace Veldrid.OpenGL
             {
                 CreateGLResources(IntPtr.Zero);
             }
+
             if (_nameChanged)
             {
-                _nameChanged = false;
-                if (_gd.Extensions.KHR_Debug)
-                {
-                    SetObjectLabel(ObjectLabelIdentifier.Buffer, _buffer, _name);
-                }
+                UpdateObjectLabel();
+            }
+        }
+
+        private void UpdateObjectLabel()
+        {
+            _nameChanged = false;
+
+            if (_gd.Extensions.KHR_Debug)
+            {
+                SetObjectLabel(ObjectLabelIdentifier.Buffer, _buffer, _name);
             }
         }
 
