@@ -664,7 +664,7 @@ namespace Veldrid.OpenGL
             contextAttribs[3] = EGL_NONE;
             contextAttribs[4] = EGL_NONE;
 
-            TryCreateContext:
+        TryCreateContext:
             if (debug)
             {
                 contextAttribs[2] = EGL_CONTEXT_OPENGL_DEBUG;
@@ -730,6 +730,16 @@ namespace Veldrid.OpenGL
                 if (eglDestroyContext(display, ctx) == 0)
                 {
                     throw new VeldridException($"Failed to destroy EGLContext {ctx}: {eglGetError()}");
+                }
+
+                if (eglDestroySurface(display, eglWindowSurface) == 0)
+                {
+                    throw new VeldridException($"Failed to destroy EGLSurface {eglWindowSurface}: {eglGetError()}");
+                }
+
+                if (eglTerminate(display) == 0)
+                {
+                    throw new VeldridException($"Failed to terminate EGLDisplay {display}: {eglGetError()}");
                 }
             }
 
@@ -1082,12 +1092,26 @@ namespace Veldrid.OpenGL
             byte* message,
             void* userParam)
         {
+#if DEBUG
+            if (type == DebugType.DebugTypeError)
+            {
+                if (Debugger.IsAttached)
+                {
+                    Debugger.Break();
+                }
+            }
+#endif
             if (!_openglInfo.InvokeDebugProc(source, type, id, severity, length, message, userParam))
             {
                 if (severity != DebugSeverity.DebugSeverityNotification)
                 {
                     string messageString = Marshal.PtrToStringAnsi((IntPtr)message, (int)length);
-                    Debug.WriteLine($"GL {source}, {type}, {severity}, {id}: {messageString}");
+                    string fullMessage = $"GL {source}, {type}, {severity}, {id}: {messageString}";
+                    if (type == DebugType.DebugTypeError)
+                    {
+                        throw new VeldridException("An OpenGL error was encountered: " + fullMessage);
+                    }
+                    Debug.WriteLine(fullMessage);
                 }
             }
         }
@@ -1096,8 +1120,12 @@ namespace Veldrid.OpenGL
         {
             base.Dispose(disposing);
 
-            FlushAndFinish();
-            _executionThread.Terminate();
+            ExecutionThread? thread = Interlocked.Exchange(ref _executionThread!, null);
+            if (thread != null)
+            {
+                thread.FlushAndFinish();
+                thread.Terminate();
+            }
         }
 
         public override bool GetOpenGLInfo(out BackendInfoOpenGL info)

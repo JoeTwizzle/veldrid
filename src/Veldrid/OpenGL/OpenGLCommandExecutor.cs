@@ -21,6 +21,7 @@ namespace Veldrid.OpenGL
         private bool _isSwapchainFB;
         private OpenGLPipeline? _graphicsPipeline;
         private BoundResourceSetInfo[] _graphicsResourceSets = Array.Empty<BoundResourceSetInfo>();
+        private bool _graphicsResourcesFlushed;
         private bool[] _newGraphicsResourceSets = Array.Empty<bool>();
         private uint[] _vertexBuffers = Array.Empty<uint>();
         private nuint[] _vbOffsets = Array.Empty<nuint>();
@@ -32,9 +33,11 @@ namespace Veldrid.OpenGL
 
         private OpenGLPipeline? _computePipeline;
         private BoundResourceSetInfo[] _computeResourceSets = Array.Empty<BoundResourceSetInfo>();
+        private bool _computeResourcesFlushed;
         private bool[] _newComputeResourceSets = Array.Empty<bool>();
 
         private bool _graphicsPipelineActive;
+        private bool _computePipelineActive;
         private bool _vertexLayoutFlushed;
         private bool _indexBufferBound;
 
@@ -252,7 +255,11 @@ namespace Veldrid.OpenGL
                 ActivateGraphicsPipeline();
             }
 
-            FlushResourceSets(graphics: true);
+            if (!_graphicsResourcesFlushed)
+            {
+                FlushResourceSets(graphics: true);
+                _graphicsResourcesFlushed = true;
+            }
 
             if (!_vertexLayoutFlushed)
             {
@@ -405,12 +412,16 @@ namespace Veldrid.OpenGL
 
         private void PreDispatchCommand()
         {
-            if (_graphicsPipelineActive)
+            if (!_computePipelineActive)
             {
                 ActivateComputePipeline();
             }
 
-            FlushResourceSets(false);
+            if (!_computeResourcesFlushed)
+            {
+                FlushResourceSets(graphics: false);
+                _computeResourcesFlushed = true;
+            }
         }
 
         private static void PostDispatchCommand()
@@ -422,10 +433,36 @@ namespace Veldrid.OpenGL
 
         public void End()
         {
+            if (_graphicsPipelineActive)
+            {
+                UnbindGraphicsPipeline();
+            }
+
+            if (_computePipelineActive)
+            {
+                UnbindComputePipeline();
+            }
+        }
+
+        private void UnbindGraphicsPipeline()
+        {
             // TODO: unbind buffers/resources?
 
             glBindVertexArray(0);
             CheckLastError();
+
+            _vertexLayoutFlushed = false;
+            _indexBufferBound = false;
+            _graphicsResourcesFlushed = false;
+            _graphicsPipelineActive = false;
+        }
+
+        private void UnbindComputePipeline()
+        {
+            // TODO: unbind buffers/resources?
+
+            _computeResourcesFlushed = false;
+            _computePipelineActive = false;
         }
 
         public void SetFramebuffer(Framebuffer fb)
@@ -505,21 +542,21 @@ namespace Veldrid.OpenGL
             {
                 _graphicsPipeline = Util.AssertSubtype<Pipeline, OpenGLPipeline>(pipeline);
                 ActivateGraphicsPipeline();
-                _vertexLayoutFlushed = false;
-                _indexBufferBound = false;
             }
             else if (pipeline.IsComputePipeline && _computePipeline != pipeline)
             {
                 _computePipeline = Util.AssertSubtype<Pipeline, OpenGLPipeline>(pipeline);
                 ActivateComputePipeline();
-                _vertexLayoutFlushed = false;
-                _indexBufferBound = false;
             }
         }
 
         private void ActivateGraphicsPipeline()
         {
-            _graphicsPipelineActive = true;
+            if (_computePipelineActive)
+            {
+                UnbindComputePipeline();
+            }
+
             _graphicsPipeline!.EnsureResourcesCreated();
 
             Util.EnsureArrayMinimumSize(ref _graphicsResourceSets, (uint)_graphicsPipeline.ResourceLayouts.Length);
@@ -530,6 +567,7 @@ namespace Veldrid.OpenGL
             {
                 _newGraphicsResourceSets[i] = true;
             }
+            _graphicsResourcesFlushed = false;
 
             // Blend State
 
@@ -753,6 +791,10 @@ namespace Veldrid.OpenGL
 
             glBindVertexArray(_graphicsPipeline.Vao);
             CheckLastError();
+
+            _vertexLayoutFlushed = false;
+            _indexBufferBound = false;
+            _graphicsPipelineActive = true;
         }
 
         public void GenerateMipmaps(Texture texture)
@@ -851,7 +893,11 @@ namespace Veldrid.OpenGL
 
         private void ActivateComputePipeline()
         {
-            _graphicsPipelineActive = false;
+            if (_graphicsPipelineActive)
+            {
+                UnbindGraphicsPipeline();
+            }
+
             _computePipeline!.EnsureResourcesCreated();
             Util.EnsureArrayMinimumSize(ref _computeResourceSets, (uint)_computePipeline.ResourceLayouts.Length);
             Util.EnsureArrayMinimumSize(ref _newComputeResourceSets, (uint)_computePipeline.ResourceLayouts.Length);
@@ -861,10 +907,13 @@ namespace Veldrid.OpenGL
             {
                 _newComputeResourceSets[i] = true;
             }
+            _computeResourcesFlushed = false;
 
             // Shader Set
             glUseProgram(_computePipeline.Program);
             CheckLastError();
+
+            _computePipelineActive = true;
         }
 
         public void SetGraphicsResourceSet(uint slot, ResourceSet rs, ReadOnlySpan<uint> dynamicOffsets)
@@ -875,6 +924,7 @@ namespace Veldrid.OpenGL
                 set.Offsets.Dispose();
                 set = new BoundResourceSetInfo(rs, dynamicOffsets);
                 _newGraphicsResourceSets[slot] = true;
+                _graphicsResourcesFlushed = false;
             }
         }
 
@@ -886,6 +936,7 @@ namespace Veldrid.OpenGL
                 set.Offsets.Dispose();
                 set = new BoundResourceSetInfo(rs, dynamicOffsets);
                 _newComputeResourceSets[slot] = true;
+                _computeResourcesFlushed = false;
             }
         }
 
