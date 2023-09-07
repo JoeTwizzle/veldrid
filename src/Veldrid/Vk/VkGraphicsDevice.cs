@@ -114,7 +114,7 @@ namespace Veldrid.Vulkan
             }
 
             CreatePhysicalDevice();
-            CreateLogicalDevice(surface, options.PreferStandardClipSpaceYDirection, vkOptions);
+            bool bindlessSupported = CreateLogicalDevice(surface, options.PreferStandardClipSpaceYDirection, vkOptions);
 
             _memoryManager = new VkDeviceMemoryManager(
                 _device,
@@ -141,7 +141,8 @@ namespace Veldrid.Vulkan
                 subsetTextureView: true,
                 commandListDebugMarkers: _debugMarkerEnabled,
                 bufferRangeBinding: true,
-                shaderFloat64: _physicalDeviceFeatures.shaderFloat64);
+                shaderFloat64: _physicalDeviceFeatures.shaderFloat64,
+                bindlessTextures: bindlessSupported);
 
             ResourceFactory = new VkResourceFactory(this);
 
@@ -741,7 +742,7 @@ namespace Veldrid.Vulkan
             return props;
         }
 
-        private void CreateLogicalDevice(VkSurfaceKHR surface, bool preferStandardClipY, VulkanDeviceOptions options)
+        private bool CreateLogicalDevice(VkSurfaceKHR surface, bool preferStandardClipY, VulkanDeviceOptions options)
         {
             GetQueueFamilyIndices(surface);
 
@@ -936,6 +937,7 @@ namespace Veldrid.Vulkan
                 _driverName = driverName;
                 _driverInfo = driverInfo;
             }
+            return bindless_supported;
         }
 
         private IntPtr GetInstanceProcAddr(string name)
