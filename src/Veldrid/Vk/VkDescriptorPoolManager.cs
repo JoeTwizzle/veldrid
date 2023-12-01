@@ -103,9 +103,11 @@ namespace Veldrid.Vulkan
         private unsafe PoolInfo CreateNewPool(DescriptorResourceCounts counts)
         {
             uint uniformBufferCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.UniformBufferCount));
+            uint uniformBufferDynamicCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.UniformBufferDynamicCount));
             uint sampledImageCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.SampledImageCount));
             uint samplerCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.SamplerCount));
             uint storageBufferCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.StorageBufferCount));
+            uint storageBufferDynamicCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.StorageBufferDynamicCount));
             uint storageImageCount = System.Math.Max(32, BitOperations.RoundUpToPowerOf2(counts.StorageImageCount));
             uint poolSizeCount = 7;
             VkDescriptorPoolSize* sizes = stackalloc VkDescriptorPoolSize[(int)poolSizeCount];
@@ -122,7 +124,7 @@ namespace Veldrid.Vulkan
             sizes[5].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
             sizes[5].descriptorCount = uniformBufferCount;
             sizes[6].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-            sizes[6].descriptorCount = storageBufferCount;
+            sizes[6].descriptorCount = storageBufferDynamicCount;
             //Not supported by veldrid
             //sizes[7].type = VkDescriptorType.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             //sizes[7].descriptorCount = 0;
@@ -146,7 +148,7 @@ namespace Veldrid.Vulkan
             VkResult result = vkCreateDescriptorPool(_gd.Device, &poolCI, null, &descriptorPool);
             VulkanUtil.CheckResult(result);
 
-            return new PoolInfo(descriptorPool, totalSets, uniformBufferCount, sampledImageCount, samplerCount, storageBufferCount, storageImageCount);
+            return new PoolInfo(descriptorPool, totalSets, uniformBufferCount, uniformBufferDynamicCount, sampledImageCount, samplerCount, storageBufferCount, storageBufferDynamicCount, storageImageCount);
         }
 
         internal unsafe void DestroyAll()
@@ -184,14 +186,16 @@ namespace Veldrid.Vulkan
                 StorageImageCount = descriptorCount;
             }
 
-            public PoolInfo(VkDescriptorPool pool, uint totalSets, uint uniformBufferCount, uint sampledImageCount, uint samplerCount, uint storageBufferCount, uint storageImageCount)
+            public PoolInfo(VkDescriptorPool pool, uint totalSets, uint uniformBufferCount, uint uniformBufferDynamicCount, uint sampledImageCount, uint samplerCount, uint storageBufferCount, uint storageBufferDynamicCount, uint storageImageCount)
             {
                 Pool = pool;
                 RemainingSets = totalSets;
                 UniformBufferCount = uniformBufferCount;
+                UniformBufferDynamicCount = uniformBufferDynamicCount;
                 SampledImageCount = sampledImageCount;
                 SamplerCount = samplerCount;
                 StorageBufferCount = storageBufferCount;
+                StorageBufferDynamicCount = storageBufferDynamicCount;
                 StorageImageCount = storageImageCount;
             }
 
