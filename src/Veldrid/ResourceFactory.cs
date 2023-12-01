@@ -191,6 +191,10 @@ namespace Veldrid
         /// <param name="description">The desired properties of the created object.</param>
         protected virtual void ValidateTextureView(in TextureViewDescription description)
         {
+            if (description.Target.IsDisposed)
+            {
+                throw new VeldridException("The target texture is disposed.");
+            }
             if (description.MipLevels == 0 || description.ArrayLayers == 0
                 || (description.BaseMipLevel + description.MipLevels) > description.Target.MipLevels
                 || (description.BaseArrayLayer + description.ArrayLayers) > description.Target.ArrayLayers)
@@ -236,8 +240,7 @@ namespace Veldrid
         protected void ValidateBuffer(in BufferDescription description)
         {
             BufferUsage usage = description.Usage;
-            if ((usage & BufferUsage.StructuredBufferReadOnly) == BufferUsage.StructuredBufferReadOnly
-                || (usage & BufferUsage.StructuredBufferReadWrite) == BufferUsage.StructuredBufferReadWrite)
+            if ((usage & (BufferUsage.StructuredBufferReadOnly | BufferUsage.StructuredBufferReadWrite)) != 0)
             {
                 if (!Features.StructuredBuffer)
                 {
@@ -249,17 +252,10 @@ namespace Veldrid
                     throw new VeldridException("Structured Buffer objects must have a non-zero StructureByteStride.");
                 }
 
-                if ((usage & BufferUsage.StructuredBufferReadWrite) != 0 && usage != BufferUsage.StructuredBufferReadWrite)
+                if ((usage & BufferUsage.UniformBuffer) != 0)
                 {
                     throw new VeldridException(
-                        $"{nameof(BufferUsage)}.{nameof(BufferUsage.StructuredBufferReadWrite)} cannot be combined with any other flag.");
-                }
-                else if ((usage & BufferUsage.VertexBuffer) != 0
-                    || (usage & BufferUsage.IndexBuffer) != 0
-                    || (usage & BufferUsage.IndirectBuffer) != 0)
-                {
-                    throw new VeldridException(
-                        $"Read-Only Structured Buffer objects cannot specify {nameof(BufferUsage)}.{nameof(BufferUsage.VertexBuffer)}, {nameof(BufferUsage)}.{nameof(BufferUsage.IndexBuffer)}, or {nameof(BufferUsage)}.{nameof(BufferUsage.IndirectBuffer)}.");
+                        $"Structured Buffer objects cannot specify {nameof(BufferUsage)}.{nameof(BufferUsage.UniformBuffer)}.");
                 }
             }
             else if (description.StructureByteStride != 0)
@@ -314,19 +310,23 @@ namespace Veldrid
         /// <param name="description">The desired properties of the created object.</param>
         protected virtual void ValidateShader(in ShaderDescription description)
         {
-            if (!Features.ComputeShader && description.Stage == ShaderStages.Compute)
+            if (!Features.ComputeShader && (description.Stage & ShaderStages.Compute) != 0)
             {
-                throw new VeldridException("GraphicsDevice does not support Compute Shaders.");
+                Throw(description.Stage);
             }
-            if (!Features.GeometryShader && description.Stage == ShaderStages.Geometry)
+            if (!Features.GeometryShader && (description.Stage & ShaderStages.Geometry) != 0)
             {
-                throw new VeldridException("GraphicsDevice does not support Compute Shaders.");
+                Throw(description.Stage);
             }
-            if (!Features.TessellationShaders
-                && (description.Stage == ShaderStages.TessellationControl
-                    || description.Stage == ShaderStages.TessellationEvaluation))
+            if (!Features.TessellationShaders &&
+                (description.Stage & (ShaderStages.TessellationControl | ShaderStages.TessellationEvaluation)) != 0)
             {
-                throw new VeldridException("GraphicsDevice does not support Tessellation Shaders.");
+                Throw(description.Stage);
+            }
+
+            static void Throw(ShaderStages stages)
+            {
+                throw new VeldridException($"GraphicsDevice does not support ShaderStages: {stages}.");
             }
         }
 

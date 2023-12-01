@@ -13,10 +13,9 @@ namespace Veldrid.Vulkan
         private readonly VkMemoryBlock _memoryBlock;
         private readonly TerraFX.Interop.Vulkan.VkBuffer _stagingBuffer;
         private readonly uint _actualImageArrayLayers;
-        private bool _destroyed;
-
+        
         public uint ActualArrayLayers => _actualImageArrayLayers;
-        public override bool IsDisposed => _destroyed;
+        public override bool IsDisposed => RefCount.IsDisposed;
 
         public VkImage OptimalDeviceImage => _optimalImage;
         public TerraFX.Interop.Vulkan.VkBuffer StagingBuffer => _stagingBuffer;
@@ -27,6 +26,7 @@ namespace Veldrid.Vulkan
 
         private VkImageLayout[] _imageLayouts;
         private bool _isSwapchainTexture;
+        private bool _leaveOpen;
         private string? _name;
 
         public ResourceRefCount RefCount { get; }
@@ -218,9 +218,9 @@ namespace Veldrid.Vulkan
                 _imageLayouts = Array.Empty<VkImageLayout>();
             }
 
+            RefCount = new ResourceRefCount(this);
             ClearIfRenderTarget();
             TransitionIfSampled();
-            RefCount = new ResourceRefCount(this);
         }
 
         // Used to construct Swapchain textures.
@@ -233,7 +233,9 @@ namespace Veldrid.Vulkan
             VkFormat vkFormat,
             TextureUsage usage,
             TextureSampleCount sampleCount,
-            VkImage existingImage)
+            VkImage existingImage,
+            bool isSwapchainTexture,
+            bool leaveOpen)
         {
             Debug.Assert(width > 0 && height > 0);
             _gd = gd;
@@ -254,10 +256,11 @@ namespace Veldrid.Vulkan
             VkSampleCount = VkFormats.VdToVkSampleCount(sampleCount);
             _optimalImage = existingImage;
             _imageLayouts = new[] { VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED };
-            _isSwapchainTexture = true;
+            _isSwapchainTexture = isSwapchainTexture;
+            _leaveOpen = leaveOpen;
 
-            ClearIfRenderTarget();
             RefCount = new ResourceRefCount(this);
+            ClearIfRenderTarget();
         }
 
         private void ClearIfRenderTarget()
@@ -265,11 +268,15 @@ namespace Veldrid.Vulkan
             // If the image is going to be used as a render target, we need to clear the data before its first use.
             if ((Usage & TextureUsage.RenderTarget) != 0)
             {
-                _gd.ClearColorTexture(this, new VkClearColorValue());
+                VkCommandList cl = _gd.GetAndBeginCommandList();
+                cl.ClearColorTexture(this, new VkClearColorValue());
+                _gd.EndAndSubmitCommands(cl);
             }
             else if ((Usage & TextureUsage.DepthStencil) != 0)
             {
-                _gd.ClearDepthTexture(this, new VkClearDepthStencilValue());
+                VkCommandList cl = _gd.GetAndBeginCommandList();
+                cl.ClearDepthTexture(this, new VkClearDepthStencilValue());
+                _gd.EndAndSubmitCommands(cl);
             }
         }
 
@@ -277,7 +284,9 @@ namespace Veldrid.Vulkan
         {
             if ((Usage & TextureUsage.Sampled) != 0)
             {
-                _gd.TransitionImageLayout(this, VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                VkCommandList cl = _gd.GetAndBeginCommandList();
+                cl.TransitionImageLayout(this, VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                _gd.EndAndSubmitCommands(cl);
             }
         }
 
@@ -288,8 +297,8 @@ namespace Veldrid.Vulkan
             if (!staging)
             {
                 VkImageAspectFlags aspect = (Usage & TextureUsage.DepthStencil) == TextureUsage.DepthStencil
-                  ? (VkImageAspectFlags.VK_IMAGE_ASPECT_DEPTH_BIT | VkImageAspectFlags.VK_IMAGE_ASPECT_STENCIL_BIT)
-                  : VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT;
+                    ? (VkImageAspectFlags.VK_IMAGE_ASPECT_DEPTH_BIT | VkImageAspectFlags.VK_IMAGE_ASPECT_STENCIL_BIT)
+                    : VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT;
                 VkImageSubresource imageSubresource = new()
                 {
                     arrayLayer = arrayLevel,
@@ -339,11 +348,14 @@ namespace Veldrid.Vulkan
                 return;
             }
 
+            Debug.Assert(baseMipLevel + levelCount <= MipLevels);
+            Debug.Assert(baseArrayLayer + layerCount <= ActualArrayLayers);
+
             VkImageLayout oldLayout = GetImageLayout(baseMipLevel, baseArrayLayer);
 #if DEBUG
-            for (uint level = 0; level < levelCount; level++)
+            for (uint layer = 0; layer < layerCount; layer++)
             {
-                for (uint layer = 0; layer < layerCount; layer++)
+                for (uint level = 0; level < levelCount; level++)
                 {
                     if (GetImageLayout(baseMipLevel + level, baseArrayLayer + layer) != oldLayout)
                     {
@@ -373,12 +385,12 @@ namespace Veldrid.Vulkan
                     baseArrayLayer,
                     layerCount,
                     aspectMask,
-                    GetImageLayout(baseMipLevel, baseArrayLayer),
+                    oldLayout,
                     newLayout);
 
-                for (uint level = 0; level < levelCount; level++)
+                for (uint layer = 0; layer < layerCount; layer++)
                 {
-                    for (uint layer = 0; layer < layerCount; layer++)
+                    for (uint level = 0; level < levelCount; level++)
                     {
                         SetImageLayout(baseMipLevel + level, baseArrayLayer + layer, newLayout);
                     }
@@ -399,9 +411,9 @@ namespace Veldrid.Vulkan
                 return;
             }
 
-            for (uint level = baseMipLevel; level < baseMipLevel + levelCount; level++)
+            for (uint layer = baseArrayLayer; layer < baseArrayLayer + layerCount; layer++)
             {
-                for (uint layer = baseArrayLayer; layer < baseArrayLayer + layerCount; layer++)
+                for (uint level = baseMipLevel; level < baseMipLevel + levelCount; level++)
                 {
                     VkImageLayout oldLayout = GetImageLayout(level, layer);
                     if (oldLayout != newLayout)
@@ -462,31 +474,29 @@ namespace Veldrid.Vulkan
 
         private protected override void DisposeCore()
         {
-            RefCount.Decrement();
+            RefCount.DecrementDispose();
         }
 
         void IResourceRefCountTarget.RefZeroed()
         {
-            if (!_destroyed)
+            if (_leaveOpen)
             {
-                base.Dispose();
+                return;
+            }
 
-                _destroyed = true;
+            bool isStaging = (Usage & TextureUsage.Staging) == TextureUsage.Staging;
+            if (isStaging)
+            {
+                vkDestroyBuffer(_gd.Device, _stagingBuffer, null);
+            }
+            else
+            {
+                vkDestroyImage(_gd.Device, _optimalImage, null);
+            }
 
-                bool isStaging = (Usage & TextureUsage.Staging) == TextureUsage.Staging;
-                if (isStaging)
-                {
-                    vkDestroyBuffer(_gd.Device, _stagingBuffer, null);
-                }
-                else
-                {
-                    vkDestroyImage(_gd.Device, _optimalImage, null);
-                }
-
-                if (_memoryBlock.DeviceMemory != VkDeviceMemory.NULL)
-                {
-                    _gd.MemoryManager.Free(_memoryBlock);
-                }
+            if (_memoryBlock.DeviceMemory != VkDeviceMemory.NULL)
+            {
+                _gd.MemoryManager.Free(_memoryBlock);
             }
         }
 

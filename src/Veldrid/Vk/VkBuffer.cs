@@ -14,9 +14,8 @@ namespace Veldrid.Vulkan
         private readonly VkMemoryBlock _memory;
         private readonly VkMemoryRequirements _bufferMemoryRequirements;
         public ResourceRefCount RefCount { get; }
-        private bool _destroyed;
         private string? _name;
-        public override bool IsDisposed => _destroyed;
+        public override bool IsDisposed => RefCount.IsDisposed;
 
         public VulkanBuffer DeviceBuffer => _deviceBuffer;
         public VkMemoryBlock Memory => _memory;
@@ -152,22 +151,13 @@ namespace Veldrid.Vulkan
 
         public override void Dispose()
         {
-            RefCount.Decrement();
-        }
-
-        private void DisposeCore()
-        {
-            if (!_destroyed)
-            {
-                _destroyed = true;
-                vkDestroyBuffer(_gd.Device, _deviceBuffer, null);
-                _gd.MemoryManager.Free(_memory);
-            }
+            RefCount.DecrementDispose();
         }
 
         void IResourceRefCountTarget.RefZeroed()
         {
-            DisposeCore();
+            vkDestroyBuffer(_gd.Device, _deviceBuffer, null);
+            _gd.MemoryManager.Free(_memory);
         }
     }
 }

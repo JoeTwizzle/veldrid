@@ -23,7 +23,6 @@ namespace Veldrid.Vulkan
         private bool? _newSyncToVBlank;
         private uint _currentImageIndex;
         private string? _name;
-        private bool _disposed;
 
         public override string? Name { get => _name; set { _name = value; _gd.SetResourceName(this, value); } }
 
@@ -41,7 +40,7 @@ namespace Veldrid.Vulkan
             }
         }
 
-        public override bool IsDisposed => _disposed;
+        public override bool IsDisposed => RefCount.IsDisposed;
 
         public VkSwapchainKHR DeviceSwapchain => _deviceSwapchain;
         public uint ImageIndex => _currentImageIndex;
@@ -79,7 +78,7 @@ namespace Veldrid.Vulkan
             vkGetDeviceQueue(_gd.Device, _presentQueueIndex, 0, &presentQueue);
             _presentQueue = presentQueue;
 
-            _framebuffer = new VkSwapchainFramebuffer(gd, this, _surface, description.Width, description.Height, description.DepthFormat);
+            _framebuffer = new VkSwapchainFramebuffer(gd, this, _surface, description);
 
             CreateSwapchain(description.Width, description.Height);
 
@@ -338,26 +337,15 @@ namespace Veldrid.Vulkan
 
         public override void Dispose()
         {
-            RefCount.Decrement();
+            RefCount.DecrementDispose();
         }
 
         void IResourceRefCountTarget.RefZeroed()
         {
-            if (!_disposed)
-            {
-                _disposed = true;
-                var fence = _imageAvailableFence;
-                vkDeviceWaitIdle(_gd.Device);
-                if (vkGetFenceStatus(_gd.Device, fence) == VkResult.VK_SUCCESS)
-                {
-                    vkWaitForFences(_gd.Device, 1, &fence, true, ulong.MaxValue);
-                    vkResetFences(_gd.Device, 1, &fence);
-                }
-                vkDestroyFence(_gd.Device, _imageAvailableFence, null);
-                _framebuffer.Dispose();
-                vkDestroySwapchainKHR(_gd.Device, _deviceSwapchain, null);
-                vkDestroySurfaceKHR(_gd.Instance, _surface, null);
-            }
+            vkDestroyFence(_gd.Device, _imageAvailableFence, null);
+            _framebuffer.Dispose();
+            vkDestroySwapchainKHR(_gd.Device, _deviceSwapchain, null);
+            vkDestroySurfaceKHR(_gd.Instance, _surface, null);
         }
     }
 }

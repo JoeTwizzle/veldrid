@@ -19,7 +19,6 @@ namespace Veldrid.Vulkan
         private readonly VkRenderPass _renderPassNoClear;
         private readonly VkRenderPass _renderPassClear;
         private readonly List<VkImageView> _attachmentViews = new();
-        private bool _destroyed;
         private string? _name;
 
         public override VulkanFramebuffer CurrentFramebuffer => _deviceFramebuffer;
@@ -27,12 +26,7 @@ namespace Veldrid.Vulkan
         public override VkRenderPass RenderPassNoClear_Load => _renderPassNoClearLoad;
         public override VkRenderPass RenderPassClear => _renderPassClear;
 
-        public override uint RenderableWidth => Width;
-        public override uint RenderableHeight => Height;
-
-        public override uint AttachmentCount { get; }
-
-        public override bool IsDisposed => _destroyed;
+        public override VkExtent2D RenderableExtent => new() { width = Width, height = Height };
 
         public VkFramebuffer(VkGraphicsDevice gd, in FramebufferDescription description, bool isPresented)
             : base(description.DepthTarget, description.ColorTargets)
@@ -367,19 +361,14 @@ namespace Veldrid.Vulkan
 
         protected override void DisposeCore()
         {
-            if (!_destroyed)
+            vkDestroyFramebuffer(_gd.Device, _deviceFramebuffer, null);
+            vkDestroyRenderPass(_gd.Device, _renderPassNoClear, null);
+            vkDestroyRenderPass(_gd.Device, _renderPassNoClearLoad, null);
+            vkDestroyRenderPass(_gd.Device, _renderPassClear, null);
+
+            foreach (VkImageView view in _attachmentViews)
             {
-                vkDestroyFramebuffer(_gd.Device, _deviceFramebuffer, null);
-                vkDestroyRenderPass(_gd.Device, _renderPassNoClear, null);
-                vkDestroyRenderPass(_gd.Device, _renderPassNoClearLoad, null);
-                vkDestroyRenderPass(_gd.Device, _renderPassClear, null);
-
-                foreach (VkImageView view in _attachmentViews)
-                {
-                    vkDestroyImageView(_gd.Device, view, null);
-                }
-
-                _destroyed = true;
+                vkDestroyImageView(_gd.Device, view, null);
             }
         }
     }

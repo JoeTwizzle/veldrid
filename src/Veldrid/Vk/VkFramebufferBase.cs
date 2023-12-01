@@ -20,12 +20,11 @@ namespace Veldrid.Vulkan
 
         public ResourceRefCount RefCount { get; }
 
-        public abstract uint RenderableWidth { get; }
-        public abstract uint RenderableHeight { get; }
+        public abstract VkExtent2D RenderableExtent { get; }
 
         public override void Dispose()
         {
-            RefCount.Decrement();
+            RefCount.DecrementDispose();
         }
 
         protected abstract void DisposeCore();
@@ -34,9 +33,15 @@ namespace Veldrid.Vulkan
         public abstract VkRenderPass RenderPassNoClear_Init { get; }
         public abstract VkRenderPass RenderPassNoClear_Load { get; }
         public abstract VkRenderPass RenderPassClear { get; }
-        public abstract uint AttachmentCount { get; }
+
+        public uint AttachmentCount { get; protected set; }
+
+        public override bool IsDisposed => RefCount.IsDisposed;
+
         public abstract void TransitionToIntermediateLayout(VkCommandBuffer cb);
         public abstract void TransitionToFinalLayout(VkCommandBuffer cb, bool attachment);
+
+        public FramebufferAttachment[] ColorTargetArray => _colorTargets;
 
         void IResourceRefCountTarget.RefZeroed()
         {
